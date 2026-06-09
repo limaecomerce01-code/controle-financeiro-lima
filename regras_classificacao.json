@@ -1,0 +1,119 @@
+{
+  "Mercadoria": [
+    "atacadao",
+    "atacadão",
+    "mercado",
+    "supermercado",
+    "comper",
+    "fort atacadista",
+    "assai",
+    "assaí"
+  ],
+  "Carne": [
+    "acougue",
+    "açougue",
+    "carne",
+    "frigorifico",
+    "frigorífico"
+  ],
+  "Bebidas": [
+    "bebida",
+    "coca",
+    "ambev",
+    "distribuidora"
+  ],
+  "Embalagens": [
+    "embalagem",
+    "beira rio"
+  ],
+  "Funcionário": [
+    "funcionario",
+    "funcionário",
+    "salario",
+    "salário",
+    "dayane"
+  ],
+  "Motoboy": [
+    "motoboy",
+    "entregador",
+    "ygor",
+    "delivery"
+  ],
+  "Aluguel": [
+    "aluguel",
+    "up gestao",
+    "up gestão"
+  ],
+  "Energia": [
+    "energisa",
+    "energia"
+  ],
+  "Sistema / site": [
+    "sistema",
+    "site",
+    "jg automacao",
+    "canva"
+  ],
+  "Contabilidade": [
+    "contabilidade",
+    "contador",
+    "aline carvalho"
+  ],
+  "Imposto": [
+    "das",
+    "imposto",
+    "receita federal"
+  ],
+  "Marketing": [
+    "meta ads",
+    "facebook",
+    "instagram",
+    "anuncio",
+    "anúncio"
+  ],
+  "Cartão / dívida": [
+    "dock",
+    "andbank",
+    "fatura",
+    "banco votorantim"
+  ],
+  "Financiamento": [
+    "yamaha",
+    "financiamento"
+  ],
+  "Investimento / melhoria": [
+    "ferramenta",
+    "mercado livre",
+    "mercadolivre",
+    "casas bahia",
+    "fritadeira",
+    "celular",
+    "obra",
+    "gesso"
+  ],
+  "Manutenção": [
+    "manutencao",
+    "manutenção",
+    "helio",
+    "hélio"
+  ],
+  "Retirada Renato": [
+    "renato lucas",
+    "renato"
+  ],
+  "Despesa pessoal": [
+    "turismo",
+    "viagem",
+    "disney",
+    "restaurante",
+    "passeio",
+    "hotel",
+    "resort",
+    "picanha",
+    "quiosque"
+  ],
+  "Venda de produto": [
+    "transferencia recebida",
+    "transferência recebida"
+  ]
+}
