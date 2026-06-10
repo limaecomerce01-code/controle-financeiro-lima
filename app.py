@@ -1009,59 +1009,72 @@ with tabs[4]:
 
     st.subheader("Cadastro rápido de palavras-chave")
 
+    st.write("Escolha um plano de contas e cole várias palavras-chave separadas por vírgula.")
+
     col1, col2 = st.columns([1, 2])
 
     with col1:
         plano_rapido = st.selectbox(
-            "Plano de contas",
+            "Escolha o plano de contas",
             options=get_all_categories(),
             key="plano_rapido_regras",
         )
 
     with col2:
         palavras_rapidas = st.text_area(
-            "Palavras-chave separadas por vírgula",
-            placeholder="Exemplo: açaí, forte atacadista, comprador, supermercado",
+            "Palavras-chave",
+            placeholder="Exemplo: açaí, atacadão, forte atacadista, supermercado, mercado",
             key="palavras_rapidas_regras",
         )
 
-    if st.button("Adicionar palavras-chave"):
+    if st.button("Adicionar palavras ao plano de contas"):
         if not palavras_rapidas.strip():
             st.warning("Digite pelo menos uma palavra-chave.")
         else:
             plano_rapido = normalize_category(plano_rapido)
 
             novas_palavras = [
-                p.strip()
-                for p in palavras_rapidas.split(",")
-                if p.strip()
+                palavra.strip()
+                for palavra in palavras_rapidas.split(",")
+                if palavra.strip()
             ]
 
             if plano_rapido not in st.session_state.rules:
                 st.session_state.rules[plano_rapido] = []
 
             adicionadas = 0
+            repetidas = 0
 
             for palavra in novas_palavras:
                 if palavra not in st.session_state.rules[plano_rapido]:
                     st.session_state.rules[plano_rapido].append(palavra)
                     adicionadas += 1
+                else:
+                    repetidas += 1
 
             save_rules(st.session_state.rules)
-            st.success(f"{adicionadas} palavra(s)-chave adicionada(s) ao plano: {plano_rapido}")
+
+            st.success(
+                f"{adicionadas} palavra(s) adicionada(s) em: {plano_rapido}. "
+                f"{repetidas} já existiam."
+            )
 
     st.divider()
 
     st.subheader("Regras cadastradas")
 
+    st.write("Aqui você pode editar ou excluir palavras-chave manualmente.")
+
     rules_df_rows = []
 
     for cat, keys in st.session_state.rules.items():
         for key in keys:
-            rules_df_rows.append({
-                "Plano de contas": normalize_category(cat),
-                "Palavra-chave": key,
-            })
+            rules_df_rows.append(
+                {
+                    "Plano de contas": normalize_category(cat),
+                    "Palavra-chave": key,
+                }
+            )
 
     rules_df = pd.DataFrame(rules_df_rows)
 
@@ -1102,7 +1115,6 @@ with tabs[4]:
         st.session_state.rules = new_rules
         save_rules(new_rules)
         st.success("Regras salvas.")
-
 with tabs[5]:
     st.subheader("Bancos / Saldos")
 
