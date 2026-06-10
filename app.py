@@ -4,12 +4,13 @@ import re
 import json
 from pathlib import Path
 
-st.set_page_config(page_title="Controle Financeiro", layout="wide")
+st.set_page_config(page_title="Controle Financeiro Lima", layout="wide")
 
 RULES_PATH = Path("regras_classificacao.json")
 DATA_PATH = Path("dados_lancamentos_salvos.json")
 PLANOS_PATH = Path("planos_contas_salvos.json")
 BANCOS_PATH = Path("bancos_salvos.json")
+
 GRUPOS_DISPONIVEIS = [
     "Entradas",
     "Mercadoria / insumos / embalagens",
@@ -84,11 +85,52 @@ DEFAULT_CATEGORY_GROUPS = {
 
 DEFAULT_RULES = {
     "Venda iFood": ["ifood pago", "ifood"],
-    "Venda de produto": ["pagseguro", "stone", "mercado pago", "pix recebido", "transferência recebida", "transferencia recebida"],
-    "Mercadoria": ["atacadao", "atacadão", "assai", "assaí", "forte atacadista", "mercado", "supermercado", "comper", "servbem", "comprador"],
-    "Carne": ["casa de carne", "açougue", "acougue", "guapore", "guaporé", "somente suinos", "somente suínos", "frigorifico", "frigorífico"],
-    "Bebidas": ["bebida", "coca", "norsa", "ambev", "zero grau", "distribuidora"],
-    "Embalagens": ["beira rio", "embalagem", "embalagens", "big embalagens", "m horizonte embalagens"],
+    "Venda de produto": [
+        "pagseguro",
+        "stone",
+        "mercado pago",
+        "pix recebido",
+        "transferência recebida",
+        "transferencia recebida",
+    ],
+    "Mercadoria": [
+        "atacadao",
+        "atacadão",
+        "assai",
+        "assaí",
+        "forte atacadista",
+        "mercado",
+        "supermercado",
+        "comper",
+        "servbem",
+        "comprador",
+    ],
+    "Carne": [
+        "casa de carne",
+        "açougue",
+        "acougue",
+        "guapore",
+        "guaporé",
+        "somente suinos",
+        "somente suínos",
+        "frigorifico",
+        "frigorífico",
+    ],
+    "Bebidas": [
+        "bebida",
+        "coca",
+        "norsa",
+        "ambev",
+        "zero grau",
+        "distribuidora",
+    ],
+    "Embalagens": [
+        "beira rio",
+        "embalagem",
+        "embalagens",
+        "big embalagens",
+        "m horizonte embalagens",
+    ],
     "Gás": ["valdeir", "gás", "gas", "botijao", "botijão"],
     "Motoboy": ["ygor", "motoboy", "entregador", "delivery"],
     "Funcionário": ["funcionario", "funcionário", "salario", "salário"],
@@ -131,13 +173,24 @@ INTERNAL_CATEGORIES = {
 }
 
 MESES = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
 ]
 
 
 def normalize_category(cat):
     c = str(cat).strip()
+
     mapa = {
         "Venda site": "Venda de produto",
         "Venda mesa": "Venda de produto",
@@ -149,22 +202,9 @@ def normalize_category(cat):
         "Aplicação RDB": "Aplicação caixinha PJ",
         "Aplicacao RDB": "Aplicação caixinha PJ",
     }
+
     return mapa.get(c, c)
 
-
-def save_data():
-    if "df" in st.session_state and not st.session_state.df.empty:
-        st.session_state.df.to_json(DATA_PATH, orient="records", force_ascii=False, date_format="iso")
-
-
-def save_planos():
-    if "planos_contas" in st.session_state:
-        st.session_state.planos_contas.to_json(PLANOS_PATH, orient="records", force_ascii=False)
-
-
-def save_bancos():
-    if "bancos_config" in st.session_state:
-        pd.DataFrame(st.session_state.bancos_config).to_json(BANCOS_PATH, orient="records", force_ascii=False)
 
 def load_rules():
     if RULES_PATH.exists():
@@ -173,12 +213,106 @@ def load_rules():
                 return json.load(f)
         except Exception:
             return DEFAULT_RULES.copy()
+
     return DEFAULT_RULES.copy()
 
 
 def save_rules(rules):
     with open(RULES_PATH, "w", encoding="utf-8") as f:
         json.dump(rules, f, ensure_ascii=False, indent=2)
+
+
+def init_state():
+    if "df" not in st.session_state:
+        if DATA_PATH.exists():
+            try:
+                df_salvo = pd.read_json(DATA_PATH)
+
+                if "Data" in df_salvo.columns:
+                    df_salvo["Data"] = pd.to_datetime(df_salvo["Data"], errors="coerce")
+
+                st.session_state.df = df_salvo
+            except Exception:
+                st.session_state.df = pd.DataFrame()
+        else:
+            st.session_state.df = pd.DataFrame()
+
+    if "rules" not in st.session_state:
+        st.session_state.rules = load_rules()
+
+    if "planos_contas" not in st.session_state:
+        if PLANOS_PATH.exists():
+            try:
+                st.session_state.planos_contas = pd.read_json(PLANOS_PATH)
+            except Exception:
+                planos = []
+
+                for plano, grupo in DEFAULT_CATEGORY_GROUPS.items():
+                    planos.append(
+                        {
+                            "Plano de contas": plano,
+                            "Grupo interno": grupo,
+                            "Ativo": True,
+                        }
+                    )
+
+                st.session_state.planos_contas = pd.DataFrame(planos)
+        else:
+            planos = []
+
+            for plano, grupo in DEFAULT_CATEGORY_GROUPS.items():
+                planos.append(
+                    {
+                        "Plano de contas": plano,
+                        "Grupo interno": grupo,
+                        "Ativo": True,
+                    }
+                )
+
+            st.session_state.planos_contas = pd.DataFrame(planos)
+
+    if "bancos_config" not in st.session_state:
+        if BANCOS_PATH.exists():
+            try:
+                st.session_state.bancos_config = pd.read_json(BANCOS_PATH).to_dict("records")
+            except Exception:
+                st.session_state.bancos_config = [
+                    {"Banco": "Nubank PJ", "Tipo": "Conta corrente", "Saldo inicial": 0.0},
+                    {"Banco": "Caixinha PJ", "Tipo": "Caixinha PJ", "Saldo inicial": 0.0},
+                ]
+        else:
+            st.session_state.bancos_config = [
+                {"Banco": "Nubank PJ", "Tipo": "Conta corrente", "Saldo inicial": 0.0},
+                {"Banco": "Caixinha PJ", "Tipo": "Caixinha PJ", "Saldo inicial": 0.0},
+            ]
+
+
+def save_data():
+    if "df" in st.session_state and not st.session_state.df.empty:
+        st.session_state.df.to_json(
+            DATA_PATH,
+            orient="records",
+            force_ascii=False,
+            date_format="iso",
+        )
+
+
+def save_planos():
+    if "planos_contas" in st.session_state:
+        st.session_state.planos_contas.to_json(
+            PLANOS_PATH,
+            orient="records",
+            force_ascii=False,
+        )
+
+
+def save_bancos():
+    if "bancos_config" in st.session_state:
+        pd.DataFrame(st.session_state.bancos_config).to_json(
+            BANCOS_PATH,
+            orient="records",
+            force_ascii=False,
+        )
 
 
 def get_all_categories():
@@ -205,6 +339,7 @@ def get_group(plano):
     if "planos_contas" in st.session_state:
         planos = st.session_state.planos_contas.copy()
         match = planos[planos["Plano de contas"].astype(str) == plano]
+
         if not match.empty:
             return str(match.iloc[0]["Grupo interno"])
 
@@ -214,10 +349,12 @@ def get_group(plano):
 def brl_to_float(text):
     if pd.isna(text):
         return 0.0
+
     if isinstance(text, (int, float)):
         return float(text)
 
     s = str(text).strip()
+
     if s == "":
         return 0.0
 
@@ -243,7 +380,11 @@ def money(v):
         v = 0.0
 
     s = f"R$ {abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"-{s}" if v < 0 else s
+
+    if v < 0:
+        return f"-{s}"
+
+    return s
 
 
 def normalize_text(s):
@@ -272,6 +413,7 @@ def parse_csv(file):
         df = pd.read_csv(file, sep=None, engine="python")
     except Exception:
         df = pd.read_csv(file, sep=";")
+
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
@@ -288,9 +430,18 @@ def parse_pdf(file):
     current_type = ""
 
     meses_num = {
-        "JAN": "01", "FEV": "02", "MAR": "03", "ABR": "04",
-        "MAI": "05", "JUN": "06", "JUL": "07", "AGO": "08",
-        "SET": "09", "OUT": "10", "NOV": "11", "DEZ": "12",
+        "JAN": "01",
+        "FEV": "02",
+        "MAR": "03",
+        "ABR": "04",
+        "MAI": "05",
+        "JUN": "06",
+        "JUL": "07",
+        "AGO": "08",
+        "SET": "09",
+        "OUT": "10",
+        "NOV": "11",
+        "DEZ": "12",
     }
 
     def parse_date_token(day, mon, year="2026"):
@@ -298,12 +449,27 @@ def parse_pdf(file):
         return f"{day.zfill(2)}/{meses_num.get(mon, mon)}/{year}"
 
     skip_words = [
-        "saldo do dia", "saldo final", "saldo inicial", "rendimento líquido",
-        "rendimento liquido", "extrato gerado", "tem alguma dúvida",
-        "caso a solução", "não nos responsabilizamos", "asseguramos",
-        "nu financeira", "nu pagamentos", "cnpj", "agência", "agencia",
-        "conta", "valores em r$", "movimentações", "movimentacoes",
-        "total de depósitos", "total de depositos",
+        "saldo do dia",
+        "saldo final",
+        "saldo inicial",
+        "rendimento líquido",
+        "rendimento liquido",
+        "extrato gerado",
+        "tem alguma dúvida",
+        "caso a solução",
+        "não nos responsabilizamos",
+        "asseguramos",
+        "nu financeira",
+        "nu pagamentos",
+        "cnpj",
+        "agência",
+        "agencia",
+        "conta",
+        "valores em r$",
+        "movimentações",
+        "movimentacoes",
+        "total de depósitos",
+        "total de depositos",
     ]
 
     with pdfplumber.open(file) as pdf:
@@ -333,7 +499,12 @@ def parse_pdf(file):
                         m_header.group(2),
                         m_header.group(3),
                     )
-                    current_type = "Entrada" if "entrada" in m_header.group(4).lower() else "Saída"
+
+                    if "entrada" in m_header.group(4).lower():
+                        current_type = "Entrada"
+                    else:
+                        current_type = "Saída"
+
                     continue
 
                 m_date_only = re.match(r"^(\d{2})\s+([A-ZÇ]{3})\s+(\d{4})", line, re.I)
@@ -371,12 +542,14 @@ def parse_pdf(file):
 
                 valor = abs(val) if tipo == "Entrada" else -abs(val)
 
-                rows.append({
-                    "Data": current_date,
-                    "Descrição": desc,
-                    "Valor": valor,
-                    "Tipo": tipo,
-                })
+                rows.append(
+                    {
+                        "Data": current_date,
+                        "Descrição": desc,
+                        "Valor": valor,
+                        "Tipo": tipo,
+                    }
+                )
 
     return pd.DataFrame(rows)
 
@@ -394,11 +567,11 @@ def standardize_df(df, rules):
             data_col = c
 
         if (
-            "descr" in lc or
-            "lançamento" in lc or
-            "lancamento" in lc or
-            "histórico" in lc or
-            "historico" in lc
+            "descr" in lc
+            or "lançamento" in lc
+            or "lancamento" in lc
+            or "histórico" in lc
+            or "historico" in lc
         ):
             desc_col = c
 
@@ -416,14 +589,17 @@ def standardize_df(df, rules):
 
     for c in df.columns:
         lc = str(c).lower()
+
         if "entrada" in lc:
             entrada_col = c
+
         if "saída" in lc or "saida" in lc:
             saida_col = c
 
     if value_col is None and not (entrada_col or saida_col):
         for c in df.columns:
             vals = pd.to_numeric(df[c], errors="coerce")
+
             if vals.notna().sum() > 0:
                 value_col = c
                 break
@@ -511,8 +687,8 @@ def alert_table(df, meta):
         return pd.DataFrame()
 
     df_cost = df[
-        (df["Tipo"] == "Saída") &
-        (~df["Plano de contas"].isin(INTERNAL_CATEGORIES))
+        (df["Tipo"] == "Saída")
+        & (~df["Plano de contas"].isin(INTERNAL_CATEGORIES))
     ].copy()
 
     for group, pct in LIMITS.items():
@@ -521,13 +697,15 @@ def alert_table(df, meta):
         diff = limit - used
         status = "OK" if diff >= 0 else "ESTOUROU"
 
-        rows.append({
-            "Grupo": group,
-            "Limite ideal": limit,
-            "Gasto atual": used,
-            "Diferença": diff,
-            "Status": status,
-        })
+        rows.append(
+            {
+                "Grupo": group,
+                "Limite ideal": limit,
+                "Gasto atual": used,
+                "Diferença": diff,
+                "Status": status,
+            }
+        )
 
     return pd.DataFrame(rows)
 
@@ -536,6 +714,7 @@ def get_month_name(dt):
     try:
         if pd.isna(dt):
             return "Sem data"
+
         return MESES[pd.to_datetime(dt).month - 1]
     except Exception:
         return "Sem data"
@@ -582,24 +761,30 @@ def calc_bancos(df, bancos_config, mes_saldos):
         saldo_inicial_total += saldo_inicial
         saldo_final_total += saldo_final
 
-        rows.append({
-            "Mês": mes_saldos,
-            "Banco": nome,
-            "Tipo": tipo,
-            "Saldo inicial": saldo_inicial,
-            "Entradas": entradas,
-            "Saídas": saidas,
-            "Saldo final calculado": saldo_final,
-        })
+        rows.append(
+            {
+                "Mês": mes_saldos,
+                "Banco": nome,
+                "Tipo": tipo,
+                "Saldo inicial": saldo_inicial,
+                "Entradas": entradas,
+                "Saídas": saidas,
+                "Saldo final calculado": saldo_final,
+            }
+        )
 
     saldos = pd.DataFrame(rows)
 
-    resumo = pd.DataFrame([{
-        "Mês": mes_saldos,
-        "Saldo inicial total": saldo_inicial_total,
-        "Saldo final total": saldo_final_total,
-        "Resultado de caixa": saldo_final_total - saldo_inicial_total,
-    }])
+    resumo = pd.DataFrame(
+        [
+            {
+                "Mês": mes_saldos,
+                "Saldo inicial total": saldo_inicial_total,
+                "Saldo final total": saldo_final_total,
+                "Resultado de caixa": saldo_final_total - saldo_inicial_total,
+            }
+        ]
+    )
 
     return saldos, resumo
 
@@ -652,9 +837,9 @@ def build_dre(df, saldos_df=None):
 
             outras_entradas = float(
                 dmes_oper.loc[
-                    (dmes_oper["Tipo"] == "Entrada") &
-                    (~dmes_oper["Plano de contas"].isin(["Venda de produto", "Venda iFood"])),
-                    "Entrada"
+                    (dmes_oper["Tipo"] == "Entrada")
+                    & (~dmes_oper["Plano de contas"].isin(["Venda de produto", "Venda iFood"])),
+                    "Entrada",
                 ].sum()
             )
 
@@ -781,17 +966,38 @@ st.caption("Sistema para controlar restaurante, classificar extrato, acompanhar 
 with st.sidebar:
     st.header("Metas do mês")
 
-    meta = st.number_input("Meta de faturamento do mês", min_value=0.0, value=55000.0, step=500.0)
-    dias_abertos = st.number_input("Dias abertos no mês", min_value=1, value=26, step=1)
-    lucro_pct = st.number_input("Lucro desejado (%)", min_value=0.0, max_value=100.0, value=15.0, step=1.0)
+    meta = st.number_input(
+        "Meta de faturamento do mês",
+        min_value=0.0,
+        value=55000.0,
+        step=500.0,
+    )
+
+    dias_abertos = st.number_input(
+        "Dias abertos no mês",
+        min_value=1,
+        value=26,
+        step=1,
+    )
+
+    lucro_pct = st.number_input(
+        "Lucro desejado (%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=15.0,
+        step=1.0,
+    )
 
     st.divider()
 
     st.header("Importar")
-    uploaded = st.file_uploader("Importe extrato, fatura ou planilha", type=["pdf", "xlsx", "xls", "csv"])
 
+    uploaded = st.file_uploader(
+        "Importe extrato, fatura ou planilha",
+        type=["pdf", "xlsx", "xls", "csv"],
+    )
 
-          if uploaded:
+    if uploaded:
         if st.button("Importar e classificar"):
             df_new = read_uploaded(uploaded, st.session_state.rules)
 
@@ -803,9 +1009,24 @@ with st.sidebar:
                 st.warning("Não encontrei lançamentos no arquivo.")
 
     st.divider()
-    st.caption("Não suba extratos no GitHub. Use o GitHub só para o código.") 
+
+    st.caption("Não suba extratos no GitHub. Use o GitHub só para o código.")
+
+
+tabs = st.tabs(
+    [
+        "Dashboard",
+        "DRE Mensal",
+        "Lançamentos",
+        "Sem classificação",
+        "Regras / Planos de contas",
+        "Bancos / Saldos",
+        "Exportar",
+    ]
+)
 
 df = st.session_state.df.copy()
+
 
 with tabs[0]:
     st.subheader("Dashboard")
@@ -813,6 +1034,7 @@ with tabs[0]:
     summary = calc_summary(df, meta, dias_abertos, lucro_pct)
 
     c1, c2, c3, c4 = st.columns(4)
+
     c1.metric("Entradas identificadas", money(summary["entradas"]))
     c2.metric("Saídas identificadas", money(summary["saidas"]))
     c3.metric("Resultado estimado", money(summary["lucro"]))
@@ -854,6 +1076,7 @@ with tabs[0]:
 
         st.dataframe(show, use_container_width=True, hide_index=True)
 
+
 with tabs[1]:
     st.subheader("DRE Mensal")
 
@@ -868,7 +1091,10 @@ with tabs[1]:
         hide_index=True,
     )
 
-    st.caption("Resultado operacional mostra a operação. Resultado de caixa mostra se o dinheiro total dos bancos/caixinhas aumentou ou diminuiu.")
+    st.caption(
+        "Resultado operacional mostra a operação. Resultado de caixa mostra se o dinheiro total dos bancos/caixinhas aumentou ou diminuiu."
+    )
+
 
 with tabs[2]:
     st.subheader("Lançamentos")
@@ -911,6 +1137,7 @@ with tabs[2]:
             st.session_state.df = new_df
             save_data()
             st.success("Alterações salvas.")
+
 
 with tabs[3]:
     st.subheader("Sem classificação")
@@ -957,8 +1184,8 @@ with tabs[3]:
                 save_data()
                 st.success("Classificações salvas. Os itens classificados sairão dessa aba.")
 
+
 with tabs[4]:
-  with tabs[4]:
     st.subheader("Planos de contas")
 
     st.write("Aqui você pode adicionar, editar ou desativar os nomes que aparecem na classificação.")
@@ -990,6 +1217,7 @@ with tabs[4]:
         planos_editados["Plano de contas"] = planos_editados["Plano de contas"].astype(str).str.strip()
         planos_editados = planos_editados[planos_editados["Plano de contas"] != ""]
         st.session_state.planos_contas = planos_editados
+        save_planos()
         st.success("Planos de contas salvos.")
 
     st.divider()
@@ -1042,8 +1270,7 @@ with tabs[4]:
             save_rules(st.session_state.rules)
 
             st.success(
-                f"{adicionadas} palavra(s) adicionada(s) em: {plano_rapido}. "
-                f"{repetidas} já existiam."
+                f"{adicionadas} palavra(s) adicionada(s) em: {plano_rapido}. {repetidas} já existiam."
             )
 
     st.divider()
@@ -1067,9 +1294,7 @@ with tabs[4]:
     rules_df = pd.DataFrame(rules_df_rows)
 
     if rules_df.empty:
-        rules_df = pd.DataFrame(
-            columns=["Palavra-chave", "Plano de contas", "Excluir"]
-        )
+        rules_df = pd.DataFrame(columns=["Palavra-chave", "Plano de contas", "Excluir"])
 
     edited_rules = st.data_editor(
         rules_df,
@@ -1116,8 +1341,9 @@ with tabs[4]:
 
         st.session_state.rules = new_rules
         save_rules(new_rules)
-
         st.success("Regras salvas.")
+
+
 with tabs[5]:
     st.subheader("Bancos / Saldos")
 
@@ -1144,6 +1370,7 @@ with tabs[5]:
 
     if st.button("Salvar bancos"):
         st.session_state.bancos_config = edited_bancos.fillna("").to_dict("records")
+        save_bancos()
         st.success("Bancos salvos.")
 
     st.divider()
@@ -1181,6 +1408,7 @@ with tabs[5]:
         st.info("Cadastre pelo menos um banco/conta.")
 
     st.caption("Para a Caixinha PJ: Aplicação caixinha PJ aumenta a caixinha. Resgate caixinha PJ diminui a caixinha.")
+
 
 with tabs[6]:
     st.subheader("Exportar")
