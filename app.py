@@ -972,6 +972,7 @@ with tabs[3]:
                 st.success("Classificações salvas. Os itens classificados sairão dessa aba.")
 
 with tabs[4]:
+  with tabs[4]:
     st.subheader("Planos de contas")
 
     st.write("Aqui você pode adicionar, editar ou desativar os nomes que aparecem na classificação.")
@@ -1009,20 +1010,20 @@ with tabs[4]:
 
     st.subheader("Cadastro rápido de palavras-chave")
 
-    st.write("Escolha um plano de contas e cole várias palavras-chave separadas por vírgula.")
+    st.write("Escolha o plano de contas e cole várias palavras-chave separadas por vírgula.")
 
     col1, col2 = st.columns([1, 2])
 
     with col1:
         plano_rapido = st.selectbox(
-            "Escolha o plano de contas",
+            "Plano de contas",
             options=get_all_categories(),
             key="plano_rapido_regras",
         )
 
     with col2:
         palavras_rapidas = st.text_area(
-            "Palavras-chave",
+            "Palavras-chave separadas por vírgula",
             placeholder="Exemplo: açaí, atacadão, forte atacadista, supermercado, mercado",
             key="palavras_rapidas_regras",
         )
@@ -1062,8 +1063,6 @@ with tabs[4]:
     st.divider()
 
     st.subheader("Regras cadastradas")
-
-     st.subheader("Regras cadastradas")
 
     st.write("Aqui você pode editar, adicionar ou excluir palavras-chave manualmente.")
 
