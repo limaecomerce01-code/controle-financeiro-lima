@@ -7,7 +7,9 @@ from pathlib import Path
 st.set_page_config(page_title="Controle Financeiro", layout="wide")
 
 RULES_PATH = Path("regras_classificacao.json")
-
+DATA_PATH = Path("dados_lancamentos_salvos.json")
+PLANOS_PATH = Path("planos_contas_salvos.json")
+BANCOS_PATH = Path("bancos_salvos.json")
 GRUPOS_DISPONIVEIS = [
     "Entradas",
     "Mercadoria / insumos / embalagens",
@@ -150,29 +152,19 @@ def normalize_category(cat):
     return mapa.get(c, c)
 
 
-def init_state():
-    if "df" not in st.session_state:
-        st.session_state.df = pd.DataFrame()
+def save_data():
+    if "df" in st.session_state and not st.session_state.df.empty:
+        st.session_state.df.to_json(DATA_PATH, orient="records", force_ascii=False, date_format="iso")
 
-    if "rules" not in st.session_state:
-        st.session_state.rules = load_rules()
 
-    if "planos_contas" not in st.session_state:
-        planos = []
-        for plano, grupo in DEFAULT_CATEGORY_GROUPS.items():
-            planos.append({
-                "Plano de contas": plano,
-                "Grupo interno": grupo,
-                "Ativo": True,
-            })
-        st.session_state.planos_contas = pd.DataFrame(planos)
+def save_planos():
+    if "planos_contas" in st.session_state:
+        st.session_state.planos_contas.to_json(PLANOS_PATH, orient="records", force_ascii=False)
 
-    if "bancos_config" not in st.session_state:
-        st.session_state.bancos_config = [
-            {"Banco": "Nubank PJ", "Tipo": "Conta corrente", "Saldo inicial": 0.0},
-            {"Banco": "Caixinha PJ", "Tipo": "Caixinha PJ", "Saldo inicial": 0.0},
-        ]
 
+def save_bancos():
+    if "bancos_config" in st.session_state:
+        pd.DataFrame(st.session_state.bancos_config).to_json(BANCOS_PATH, orient="records", force_ascii=False)
 
 def load_rules():
     if RULES_PATH.exists():
@@ -803,7 +795,8 @@ with st.sidebar:
             df_new = read_uploaded(uploaded, st.session_state.rules)
 
             if not df_new.empty:
-                st.session_state.df = df_new
+              st.session_state.df = df_new
+save_data()
                 st.success(f"Arquivo importado com {len(df_new)} lançamentos.")
             else:
                 st.warning("Não encontrei lançamentos no arquivo.")
@@ -925,6 +918,7 @@ with tabs[2]:
                 new_df.loc[idx, "Grupo interno"] = get_group(cat)
 
             st.session_state.df = new_df
+            save_data()
             st.success("Alterações salvas.")
 
 with tabs[3]:
@@ -969,6 +963,7 @@ with tabs[3]:
                     new_df.loc[idx, "Grupo interno"] = get_group(cat)
 
                 st.session_state.df = new_df
+                save_data()
                 st.success("Classificações salvas. Os itens classificados sairão dessa aba.")
 
 with tabs[4]:
