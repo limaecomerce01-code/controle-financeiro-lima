@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import re
@@ -31,7 +30,9 @@ DEFAULT_RULES = {
     "Manutenção": ["manutencao", "manutenção", "helio", "hélio", "mecanica", "mecânica"],
     "Retirada Renato": ["renato lucas", "renato"],
     "Despesa pessoal": ["turismo", "viagem", "disney", "restaurante", "passeio", "hotel", "resort", "picanha", "quiosque"],
-    "Movimentação caixinha PJ": ["resgate rdb", "aplicação rdb", "aplicacao rdb", "rdb"],
+    "Resgate caixinha PJ": ["resgate rdb", "resgate caixinha", "resgate da caixinha", "retirada caixinha"],
+    "Aplicação caixinha PJ": ["aplicação rdb", "aplicacao rdb", "aplicação caixinha", "aplicacao caixinha", "guardar caixinha"],
+    "Movimentação caixinha PJ": ["rdb"],
     "Pró-labore Renato": ["renato lucas", "renato"],
     "Pró-labore Dayane": ["dayane cristina", "wellhub dayane"],
 }
@@ -75,6 +76,8 @@ CATEGORY_GROUPS = {
     "Pix cliente": "Entradas",
     "Cartão": "Entradas",
     "Movimentação caixinha PJ": "Transferência interna",
+    "Resgate caixinha PJ": "Transferência interna",
+    "Aplicação caixinha PJ": "Transferência interna",
     "Transferência interna": "Transferência interna",
     "Saldo banco": "Saldo",
     "Saldo caixinha PJ": "Saldo",
@@ -89,13 +92,19 @@ CATEGORY_GROUPS = {
     "Juros Empréstimos": "Dívidas / impostos",
 }
 
-# Categorias escondidas em relatórios de operação porque são movimento de caixa, não venda nem despesa.
-INTERNAL_CATEGORIES = {"Movimentação caixinha PJ", "Transferência interna", "Saldo banco", "Saldo caixinha PJ"}
+INTERNAL_CATEGORIES = {
+    "Movimentação caixinha PJ",
+    "Resgate caixinha PJ",
+    "Aplicação caixinha PJ",
+    "Transferência interna",
+    "Saldo banco",
+    "Saldo caixinha PJ",
+}
 
 ALL_CATEGORIES = sorted(set(CATEGORY_GROUPS.keys()))
 
+
 def normalize_category(cat):
-    """Unifica nomes antigos de vendas para simplificar o Plano de Contas."""
     c = str(cat).strip()
     mapa = {
         "Venda site": "Venda de produto",
@@ -104,6 +113,9 @@ def normalize_category(cat):
         "Venda balcão": "Venda de produto",
         "Venda balcao": "Venda de produto",
         "Retirada Renato": "Pró-labore Renato",
+        "Resgate RDB": "Resgate caixinha PJ",
+        "Aplicação RDB": "Aplicação caixinha PJ",
+        "Aplicacao RDB": "Aplicação caixinha PJ",
     }
     return mapa.get(c, c)
 
@@ -114,33 +126,40 @@ def load_rules():
             return json.load(f)
     return DEFAULT_RULES.copy()
 
+
 def save_rules(rules):
     with open(RULES_PATH, "w", encoding="utf-8") as f:
         json.dump(rules, f, ensure_ascii=False, indent=2)
 
+
 def brl_to_float(text):
-    """Converte valores brasileiros para float, aceitando R$ 1.234,56, -R$ 14,00 e números já prontos."""
     if pd.isna(text):
         return 0.0
     if isinstance(text, (int, float)):
         return float(text)
+
     s = str(text).strip()
     if s == "":
         return 0.0
+
     negativo = "-" in s
     s = s.replace("R$", "").replace(" ", "")
-    # Formato brasileiro: 1.234,56
+
     if "," in s:
         s = s.replace(".", "").replace(",", ".")
+
     s = re.sub(r"[^\d\.\-]", "", s)
+
     try:
         v = float(s)
         return -abs(v) if negativo else v
     except Exception:
         return 0.0
 
+
 def normalize_text(s):
     return str(s).lower().strip()
+
 
 def classify(desc, rules):
     d = normalize_text(desc)
@@ -150,18 +169,21 @@ def classify(desc, rules):
                 return category
     return "Sem classificação"
 
+
 def parse_excel(file):
     df = pd.read_excel(file)
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+
 def parse_csv(file):
     try:
         df = pd.read_csv(file, sep=None, engine="python")
-    except:
+    except Exception:
         df = pd.read_csv(file, sep=";")
     df.columns = [str(c).strip() for c in df.columns]
     return df
+
 
 def parse_pdf(file):
     try:
@@ -173,17 +195,47 @@ def parse_pdf(file):
     rows = []
     current_date = ""
     current_type = ""
-    meses = {"JAN":"01", "FEV":"02", "MAR":"03", "ABR":"04", "MAI":"05", "JUN":"06", "JUL":"07", "AGO":"08", "SET":"09", "OUT":"10", "NOV":"11", "DEZ":"12"}
+    meses = {
+        "JAN": "01",
+        "FEV": "02",
+        "MAR": "03",
+        "ABR": "04",
+        "MAI": "05",
+        "JUN": "06",
+        "JUL": "07",
+        "AGO": "08",
+        "SET": "09",
+        "OUT": "10",
+        "NOV": "11",
+        "DEZ": "12",
+    }
 
     def parse_date_token(day, mon, year="2026"):
         mon = mon.upper()
         return f"{day.zfill(2)}/{meses.get(mon, mon)}/{year}"
 
     skip_words = [
-        "saldo do dia", "saldo final", "saldo inicial", "rendimento líquido", "rendimento liquido",
-        "extrato gerado", "tem alguma dúvida", "caso a solução", "não nos responsabilizamos",
-        "asseguramos", "nu financeira", "nu pagamentos", "cnpj", "agência", "agencia", "conta",
-        "valores em r$", "movimentações", "movimentacoes", "total de depósitos", "total de depositos",
+        "saldo do dia",
+        "saldo final",
+        "saldo inicial",
+        "rendimento líquido",
+        "rendimento liquido",
+        "extrato gerado",
+        "tem alguma dúvida",
+        "caso a solução",
+        "não nos responsabilizamos",
+        "asseguramos",
+        "nu financeira",
+        "nu pagamentos",
+        "cnpj",
+        "agência",
+        "agencia",
+        "conta",
+        "valores em r$",
+        "movimentações",
+        "movimentacoes",
+        "total de depósitos",
+        "total de depositos",
     ]
 
     with pdfplumber.open(file) as pdf:
@@ -193,50 +245,73 @@ def parse_pdf(file):
                 line = " ".join(raw_line.split()).strip()
                 if not line:
                     continue
+
                 low = line.lower()
                 if any(w in low for w in skip_words):
                     continue
 
-                # Ex: 09 MAI 2026 Total de entradas + 956,13
-                m_header = re.match(r"^(\d{2})\s+([A-ZÇ]{3})\s+(\d{4})\s+Total de (entradas|saídas|saidas)\s+([\+\-])\s*([\d\.]+,\d{2})$", line, re.I)
+                m_header = re.match(
+                    r"^(\d{2})\s+([A-ZÇ]{3})\s+(\d{4})\s+Total de (entradas|saídas|saidas)\s+([\+\-])\s*([\d\.]+,\d{2})$",
+                    line,
+                    re.I,
+                )
                 if m_header:
-                    current_date = parse_date_token(m_header.group(1), m_header.group(2), m_header.group(3))
+                    current_date = parse_date_token(
+                        m_header.group(1),
+                        m_header.group(2),
+                        m_header.group(3),
+                    )
                     current_type = "Entrada" if "entrada" in m_header.group(4).lower() else "Saída"
                     continue
 
-                # Ex: 10 MAI 2026 Total de entradas + 1.555,30 sem lançar o total como movimentação
                 m_date_only = re.match(r"^(\d{2})\s+([A-ZÇ]{3})\s+(\d{4})", line, re.I)
                 if m_date_only and "total de" not in low:
-                    current_date = parse_date_token(m_date_only.group(1), m_date_only.group(2), m_date_only.group(3))
+                    current_date = parse_date_token(
+                        m_date_only.group(1),
+                        m_date_only.group(2),
+                        m_date_only.group(3),
+                    )
 
                 if "total de entradas" in low:
                     current_type = "Entrada"
                     continue
+
                 if "total de saídas" in low or "total de saidas" in low:
                     current_type = "Saída"
                     continue
 
-                # Pega valor no fim da linha: 564,56 ou -R$ 564,56
                 m = re.search(r"(.+?)\s+(-?R?\$?\s*[\d\.]+,\d{2})$", line, re.I)
                 if not m:
                     continue
+
                 desc = m.group(1).strip()
                 val = brl_to_float(m.group(2))
+
                 if not desc or val == 0:
                     continue
+
                 if desc.lower().startswith(("total de entradas", "total de saídas", "total de saidas", "saldo")):
                     continue
 
                 tipo = current_type
                 if not tipo:
                     tipo = "Saída" if val < 0 else "Entrada"
+
                 valor = abs(val) if tipo == "Entrada" else -abs(val)
-                rows.append({"Data": current_date, "Descrição": desc, "Valor": valor, "Tipo": tipo})
+
+                rows.append(
+                    {
+                        "Data": current_date,
+                        "Descrição": desc,
+                        "Valor": valor,
+                        "Tipo": tipo,
+                    }
+                )
 
     return pd.DataFrame(rows)
 
+
 def standardize_df(df, rules):
-    cols = {c.lower(): c for c in df.columns}
     data_col = None
     desc_col = None
     value_col = None
@@ -244,7 +319,7 @@ def standardize_df(df, rules):
     plan_col = None
 
     for c in df.columns:
-        lc = c.lower()
+        lc = str(c).lower()
         if "data" in lc:
             data_col = c
         if "descr" in lc or "lançamento" in lc or "lancamento" in lc or "histórico" in lc or "historico" in lc:
@@ -258,8 +333,8 @@ def standardize_df(df, rules):
 
     if desc_col is None:
         desc_col = df.columns[0]
+
     if value_col is None:
-        # tenta achar coluna numérica
         for c in df.columns:
             vals = pd.to_numeric(df[c], errors="coerce")
             if vals.notna().sum() > 0:
@@ -270,9 +345,9 @@ def standardize_df(df, rules):
     out["Data"] = df[data_col] if data_col else ""
     out["Descrição"] = df[desc_col].astype(str)
 
-    # Se a planilha já tiver colunas separadas Entrada e Saída, usa as duas.
     entrada_col = None
     saida_col = None
+
     for c in df.columns:
         lc = str(c).lower()
         if "entrada" in lc:
@@ -287,576 +362,764 @@ def standardize_df(df, rules):
     else:
         out["Valor"] = df[value_col].apply(brl_to_float) if value_col else 0.0
 
-    out["Valor"] = pd.to_numeric(out["Valor"], errors="coerce").fillna(0.0)
-
-    if type_col:
-        out["Tipo"] = df[type_col].astype(str)
-        out.loc[out["Tipo"].str.lower().str.contains("saída|saida", na=False), "Valor"] = -out["Valor"].abs()
-        out.loc[out["Tipo"].str.lower().str.contains("entrada", na=False), "Valor"] = out["Valor"].abs()
-    else:
-        out["Tipo"] = out["Valor"].apply(lambda x: "Entrada" if x > 0 else "Saída")
-
-    if plan_col and plan_col != desc_col:
-        out["Categoria"] = df[plan_col].fillna("").astype(str)
-        out["Categoria"] = out.apply(lambda r: classify(r["Descrição"], rules) if r["Categoria"].strip() in ["", "nan", "Sem classificação"] else r["Categoria"], axis=1)
-    else:
-        out["Categoria"] = out["Descrição"].apply(lambda x: classify(x, rules))
-
-    out["Categoria"] = out["Categoria"].apply(normalize_category)
-    out["Grupo"] = out["Categoria"].map(CATEGORY_GROUPS).fillna("Sem classificação")
+    out["Tipo"] = out["Valor"].apply(lambda x: "Entrada" if x >= 0 else "Saída")
     out["Entrada"] = out["Valor"].apply(lambda x: x if x > 0 else 0.0)
     out["Saída"] = out["Valor"].apply(lambda x: abs(x) if x < 0 else 0.0)
-    out["Observação"] = ""
+
+    if plan_col:
+        out["Plano de contas"] = df[plan_col].fillna("").astype(str)
+        out["Plano de contas"] = out["Plano de contas"].replace("", "Sem classificação")
+    else:
+        out["Plano de contas"] = out["Descrição"].apply(lambda x: classify(x, rules))
+
+    out["Plano de contas"] = out["Plano de contas"].apply(normalize_category)
+    out["Grupo interno"] = out["Plano de contas"].map(CATEGORY_GROUPS).fillna("Sem classificação")
+
+    try:
+        out["Data"] = pd.to_datetime(out["Data"], dayfirst=True, errors="coerce")
+    except Exception:
+        pass
+
     return out
 
-def prepare_summary(df, meta_faturamento):
-    df2 = df.copy()
-    if df2.empty:
-        return 0.0, 0.0, 0.0, pd.DataFrame(columns=["Grupo", "Valor_abs", "Limite ideal", "Diferença", "Status"])
 
-    df2["Valor"] = pd.to_numeric(df2["Valor"], errors="coerce").fillna(0.0)
-    df2["Grupo"] = df2["Grupo"].fillna("Sem classificação").astype(str)
-    df2["Categoria"] = df2.get("Categoria", "Sem classificação").fillna("Sem classificação").astype(str)
-    df2["Valor_abs"] = df2["Valor"].abs()
-    df_operacao = df2[~df2["Categoria"].isin(INTERNAL_CATEGORIES)].copy()
+def read_uploaded(file, rules):
+    name = file.name.lower()
+    if name.endswith(".xlsx") or name.endswith(".xls"):
+        df = parse_excel(file)
+    elif name.endswith(".csv"):
+        df = parse_csv(file)
+    elif name.endswith(".pdf"):
+        df = parse_pdf(file)
+    else:
+        st.error("Formato não suportado. Use XLSX, XLS, CSV ou PDF.")
+        return pd.DataFrame()
 
-    entradas = df_operacao[df_operacao["Valor"] > 0]["Valor"].sum()
-    saidas = df_operacao[df_operacao["Valor"] < 0]["Valor_abs"].sum()
-    lucro_estimado = entradas - saidas
+    if df.empty:
+        return df
 
-    summary = df_operacao[df_operacao["Valor"] < 0].groupby("Grupo", as_index=False)["Valor_abs"].sum()
-    summary["Limite ideal"] = summary["Grupo"].map(lambda g: float(LIMITS.get(g, 0)) * float(meta_faturamento)).astype(float)
-    summary["Valor_abs"] = pd.to_numeric(summary["Valor_abs"], errors="coerce").fillna(0.0).astype(float)
-    summary["Diferença"] = summary["Limite ideal"] - summary["Valor_abs"]
-    summary["Status"] = summary.apply(lambda r: "OK" if r["Valor_abs"] <= r["Limite ideal"] or r["Limite ideal"] == 0 else "ESTOUROU", axis=1)
-    return entradas, saidas, lucro_estimado, summary
+    return standardize_df(df, rules)
 
 
-def fmt_brl(v):
+def money(v):
     try:
-        return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        v = float(v)
     except Exception:
-        return "R$ 0,00"
-
-def mes_pt_from_date(x):
-    if pd.isna(x) or str(x).strip() == "":
-        return "Sem data"
-    dt = pd.to_datetime(x, dayfirst=True, errors="coerce")
-    if pd.isna(dt):
-        return "Sem data"
-    meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-    return meses[dt.month-1]
-
-def soma_categoria_mes(dfm, categoria):
-    if dfm.empty:
-        return 0.0
-    return float(dfm.loc[dfm["Categoria"].eq(categoria), "Valor"].abs().sum())
-
-def soma_categorias_mes(dfm, categorias):
-    if dfm.empty:
-        return 0.0
-    return float(dfm.loc[dfm["Categoria"].isin(categorias), "Valor"].abs().sum())
-
-def prepare_dre_mensal(df, saldos_bancos=None, mes_saldo="Junho"):
-    meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-    saldos_bancos = saldos_bancos or {}
-    dfx = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
-    if dfx.empty:
-        dfx = pd.DataFrame(columns=["Data", "Categoria", "Valor"])
-    if "Categoria" not in dfx.columns:
-        dfx["Categoria"] = "Sem classificação"
-    if "Valor" not in dfx.columns:
-        dfx["Valor"] = 0.0
-    dfx["Categoria"] = dfx["Categoria"].fillna("Sem classificação").astype(str).apply(normalize_category)
-    dfx["Valor"] = pd.to_numeric(dfx["Valor"], errors="coerce").fillna(0.0)
-    dfx["Mês"] = dfx.get("Data", "").apply(mes_pt_from_date) if "Data" in dfx.columns else "Sem data"
-
-    rows = []
-    def add_row(nome, valores=None):
-        row = {"Plano de Contas": nome}
-        valores = valores or {}
-        for m in meses:
-            row[m] = float(valores.get(m, 0.0))
-        rows.append(row)
-
-    # Saldos dos bancos cadastrados, flexível para qualquer empresa/usuário.
-    bancos_df = saldos_bancos.get("bancos_df", pd.DataFrame()) if isinstance(saldos_bancos, dict) else pd.DataFrame()
-    add_row("SALDO INICIAL", {mes_saldo: saldos_bancos.get("saldo_inicial_total", 0.0) if isinstance(saldos_bancos, dict) else 0.0})
-    if isinstance(bancos_df, pd.DataFrame) and not bancos_df.empty:
-        for _, b in bancos_df.iterrows():
-            nome_banco = str(b.get("Banco", "Banco")).strip() or "Banco"
-            add_row(nome_banco, {mes_saldo: float(b.get("Saldo inicial", 0.0) or 0.0)})
-
-    # receitas e despesas por mês
-    receita_prod = {}
-    receita_ifood = {}
-    custos = {}
-    equipe = {}
-    fixos = {}
-    sistemas_marketing = {}
-    dividas = {}
-    prolabore = {}
-    investimento = {}
-    sem_class = {}
-    caixinha_mov = {}
-    margem = {}
-    margem_pct = {}
-    desp_fixas_total = {}
-
-    for m in meses:
-        dfm = dfx[dfx["Mês"].eq(m)].copy()
-        # ignora movimento interno da caixinha na operação
-        dfm_op = dfm[~dfm["Categoria"].isin(INTERNAL_CATEGORIES)].copy()
-        receita_prod[m] = soma_categoria_mes(dfm_op[dfm_op["Valor"] > 0], "Venda de produto") + soma_categoria_mes(dfm_op[dfm_op["Valor"] > 0], "Pix cliente") + soma_categoria_mes(dfm_op[dfm_op["Valor"] > 0], "Dinheiro") + soma_categoria_mes(dfm_op[dfm_op["Valor"] > 0], "Cartão")
-        receita_ifood[m] = soma_categoria_mes(dfm_op[dfm_op["Valor"] > 0], "Venda iFood")
-        custos[m] = soma_categorias_mes(dfm_op[dfm_op["Valor"] < 0], ["Mercadoria", "Carne", "Bebidas", "Embalagens", "Gás", "Frete e seguros sobre compras"])
-        equipe[m] = soma_categorias_mes(dfm_op[dfm_op["Valor"] < 0], ["Funcionário", "Motoboy", "Diarista"])
-        fixos[m] = soma_categorias_mes(dfm_op[dfm_op["Valor"] < 0], ["Aluguel", "Energia", "Internet", "Contabilidade", "Material de Expediente", "Serviços Assessorias/Consultorias"])
-        sistemas_marketing[m] = soma_categorias_mes(dfm_op[dfm_op["Valor"] < 0], ["Sistema / site", "Marketing", "Publicidade e Propaganda"])
-        dividas[m] = soma_categorias_mes(dfm_op[dfm_op["Valor"] < 0], ["Imposto", "Cartão / dívida", "Financiamento", "Tarifas Bancárias", "Juros Empréstimos"])
-        prolabore[m] = soma_categorias_mes(dfm_op[dfm_op["Valor"] < 0], ["Pró-labore Renato", "Pró-labore Dayane", "Despesa pessoal"])
-        investimento[m] = soma_categorias_mes(dfm_op[dfm_op["Valor"] < 0], ["Investimento / melhoria", "Manutenção"])
-        sem_class[m] = soma_categoria_mes(dfm_op[dfm_op["Valor"] < 0], "Sem classificação")
-        caixinha_mov[m] = float(dfm.loc[dfm["Categoria"].eq("Movimentação caixinha PJ"), "Valor"].sum())
-        receita = receita_prod[m] + receita_ifood[m]
-        margem[m] = receita - custos[m]
-        margem_pct[m] = (margem[m] / receita) if receita else 0.0
-        desp_fixas_total[m] = equipe[m] + fixos[m] + sistemas_marketing[m] + dividas[m] + prolabore[m] + investimento[m] + sem_class[m]
-
-    receita_total = {m: receita_prod[m] + receita_ifood[m] for m in meses}
-    add_row("RECEITAS BRUTA", receita_total)
-    add_row("(+) Venda Produtos", receita_prod)
-    add_row("(+) Venda Produtos iFood", receita_ifood)
-    add_row("CUSTOS VARIÁVEIS:", custos)
-    add_row("Compras de mercadorias", custos)
-    add_row("Frete e Seguros sobre compras", {})
-    add_row("Diarista", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Diarista") for m in meses})
-    add_row("MARGEM CONTRIBUIÇÃO", margem)
-    add_row("% MARGEM CONTRIBUIÇÃO", {m: margem_pct[m] for m in meses})
-    add_row("DESPESAS FIXAS:", desp_fixas_total)
-    add_row("Salário/Folha de pagamento", {m: soma_categorias_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], ["Funcionário", "Motoboy"]) for m in meses})
-    add_row("Pró-labore Renato", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Pró-labore Renato") for m in meses})
-    add_row("Pró-labore Dayane", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Pró-labore Dayane") for m in meses})
-    add_row("Aluguel", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Aluguel") for m in meses})
-    add_row("Energia Elétrica", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Energia") for m in meses})
-    add_row("Internet", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Internet") for m in meses})
-    add_row("Sistemas de Gestão", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Sistema / site") for m in meses})
-    add_row("Marketing Digital", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Marketing") for m in meses})
-    add_row("Utensílios e Ferramentas", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Investimento / melhoria") for m in meses})
-    add_row("Manutenção Veículos", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Manutenção") for m in meses})
-    add_row("Gás", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Gás") for m in meses})
-    add_row("Serviços Contabilidade", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Contabilidade") for m in meses})
-    add_row("Emprestimo", {m: soma_categorias_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], ["Cartão / dívida", "Juros Empréstimos"]) for m in meses})
-    add_row("Publicidade e Propaganda", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Publicidade e Propaganda") for m in meses})
-    add_row("Tarifas Bancárias", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Tarifas Bancárias") for m in meses})
-    add_row("Financiamento Moto", {m: soma_categoria_mes(dfx[(dfx["Mês"].eq(m)) & (dfx["Valor"] < 0)], "Financiamento") for m in meses})
-    add_row("Sem classificação", sem_class)
-    add_row("MOVIMENTO CAIXINHA PJ", caixinha_mov)
-    add_row("SALDO FINAL", {mes_saldo: saldos_bancos.get("saldo_final_total", 0.0) if isinstance(saldos_bancos, dict) else 0.0})
-    if isinstance(bancos_df, pd.DataFrame) and not bancos_df.empty:
-        for _, b in bancos_df.iterrows():
-            nome_banco = str(b.get("Banco", "Banco")).strip() or "Banco"
-            add_row(f"{nome_banco} - saldo final", {mes_saldo: float(b.get("Saldo final automático", 0.0) or 0.0)})
-
-    dre = pd.DataFrame(rows)
-    return dre
-
-def style_dre(row):
-    nome = str(row.get("Plano de Contas", ""))
-    styles = []
-    for col in row.index:
-        if col == "Plano de Contas":
-            if nome.isupper() or nome in ["SALDO INICIAL", "SALDO FINAL", "RECEITAS BRUTA", "CUSTOS VARIÁVEIS:", "MARGEM CONTRIBUIÇÃO", "% MARGEM CONTRIBUIÇÃO", "DESPESAS FIXAS:", "MOVIMENTO CAIXINHA PJ"]:
-                styles.append("font-weight: bold; background-color: #dbeafe;")
-            else:
-                styles.append("")
-        else:
-            if nome in ["CUSTOS VARIÁVEIS:", "DESPESAS FIXAS:"]:
-                styles.append("background-color: #fde2d5; font-weight: bold;")
-            elif nome in ["RECEITAS BRUTA"]:
-                styles.append("background-color: #dff3e6; font-weight: bold;")
-            elif nome in ["MARGEM CONTRIBUIÇÃO", "% MARGEM CONTRIBUIÇÃO"]:
-                styles.append("background-color: #e8f0fe; font-weight: bold;")
-            elif nome in ["SALDO INICIAL", "SALDO FINAL", "MOVIMENTO CAIXINHA PJ"]:
-                styles.append("background-color: #dbeafe; font-weight: bold;")
-            else:
-                styles.append("")
-    return styles
-
-def format_dre_value(v, row_name):
-    if row_name == "% MARGEM CONTRIBUIÇÃO":
-        return f"{float(v)*100:.2f}%".replace(".", ",")
-    return fmt_brl(v)
+        v = 0.0
+    s = f"R$ {abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"-{s}" if v < 0 else s
 
 
+def calc_summary(df, meta, dias_abertos, lucro_pct):
+    if df.empty:
+        return {
+            "entradas": 0.0,
+            "saidas": 0.0,
+            "lucro": 0.0,
+            "meta_diaria": meta / max(dias_abertos, 1),
+            "lucro_desejado": meta * lucro_pct / 100,
+        }
 
-BANK_SOURCE_OPTIONS = ["Extrato importado", "Caixinha PJ (RDB)", "Manual"]
+    df_operacional = df[~df["Plano de contas"].isin(INTERNAL_CATEGORIES)].copy()
 
-MESES_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    entradas = float(df_operacional["Entrada"].sum())
+    saidas = float(df_operacional["Saída"].sum())
+    lucro = entradas - saidas
 
-def default_bancos_df():
-    return pd.DataFrame([
-        {"Banco": "Nubank PJ", "Tipo": "Extrato importado", "Saldo inicial": 0.0, "Entradas manuais": 0.0, "Saídas manuais": 0.0},
-        {"Banco": "Caixinha PJ", "Tipo": "Caixinha PJ (RDB)", "Saldo inicial": 0.0, "Entradas manuais": 0.0, "Saídas manuais": 0.0},
-    ])
-
-def banco_movimentos(df, mes, tipo):
-    """Calcula entradas e saídas de bancos de forma automática quando possível."""
-    if not isinstance(df, pd.DataFrame) or df.empty:
-        return 0.0, 0.0
-    dfx = df.copy()
-    if "Valor" not in dfx.columns:
-        return 0.0, 0.0
-    dfx["Valor"] = pd.to_numeric(dfx["Valor"], errors="coerce").fillna(0.0)
-    dfx["Mês"] = dfx.get("Data", "").apply(mes_pt_from_date) if "Data" in dfx.columns else "Sem data"
-    dfm = dfx[dfx["Mês"].eq(mes)].copy()
-    if dfm.empty:
-        return 0.0, 0.0
-    tipo = str(tipo)
-    if tipo == "Extrato importado":
-        # Movimento real da conta importada: tudo que entrou e tudo que saiu.
-        entradas = float(dfm.loc[dfm["Valor"] > 0, "Valor"].sum())
-        saidas = float(dfm.loc[dfm["Valor"] < 0, "Valor"].abs().sum())
-        return entradas, saidas
-    if tipo == "Caixinha PJ (RDB)":
-        desc = dfm.get("Descrição", pd.Series([""] * len(dfm))).astype(str).str.lower()
-        aplicacao = dfm[desc.str.contains("aplica", na=False) & desc.str.contains("rdb", na=False)]
-        resgate = dfm[desc.str.contains("resgate", na=False) & desc.str.contains("rdb", na=False)]
-        # Para a caixinha: aplicação aumenta saldo; resgate diminui saldo.
-        entradas = float(aplicacao["Valor"].abs().sum())
-        saidas = float(resgate["Valor"].abs().sum())
-        return entradas, saidas
-    return 0.0, 0.0
-
-def preparar_bancos(df, bancos_base, mes):
-    if not isinstance(bancos_base, pd.DataFrame) or bancos_base.empty:
-        bancos_base = default_bancos_df()
-    bancos = bancos_base.copy()
-    for col in ["Banco", "Tipo"]:
-        if col not in bancos.columns:
-            bancos[col] = ""
-    for col in ["Saldo inicial", "Entradas manuais", "Saídas manuais"]:
-        if col not in bancos.columns:
-            bancos[col] = 0.0
-        bancos[col] = pd.to_numeric(bancos[col], errors="coerce").fillna(0.0)
-    bancos["Tipo"] = bancos["Tipo"].replace("", "Manual")
-
-    entradas_calc = []
-    saidas_calc = []
-    saldo_final = []
-    for _, r in bancos.iterrows():
-        ent_auto, sai_auto = banco_movimentos(df, mes, r.get("Tipo", "Manual"))
-        if r.get("Tipo", "Manual") == "Manual":
-            ent = float(r.get("Entradas manuais", 0.0))
-            sai = float(r.get("Saídas manuais", 0.0))
-        else:
-            ent = ent_auto + float(r.get("Entradas manuais", 0.0))
-            sai = sai_auto + float(r.get("Saídas manuais", 0.0))
-        ini = float(r.get("Saldo inicial", 0.0))
-        entradas_calc.append(ent)
-        saidas_calc.append(sai)
-        saldo_final.append(ini + ent - sai)
-    bancos["Entradas automáticas"] = entradas_calc
-    bancos["Saídas automáticas"] = saidas_calc
-    bancos["Saldo final automático"] = saldo_final
-    return bancos
-
-def saldos_from_bancos(bancos_calc):
-    if not isinstance(bancos_calc, pd.DataFrame) or bancos_calc.empty:
-        bancos_calc = default_bancos_df()
-        bancos_calc["Entradas automáticas"] = 0.0
-        bancos_calc["Saídas automáticas"] = 0.0
-        bancos_calc["Saldo final automático"] = bancos_calc["Saldo inicial"]
     return {
-        "bancos_df": bancos_calc.copy(),
-        "saldo_inicial_total": float(pd.to_numeric(bancos_calc.get("Saldo inicial", 0), errors="coerce").fillna(0).sum()),
-        "saldo_final_total": float(pd.to_numeric(bancos_calc.get("Saldo final automático", 0), errors="coerce").fillna(0).sum()),
+        "entradas": entradas,
+        "saidas": saidas,
+        "lucro": lucro,
+        "meta_diaria": meta / max(dias_abertos, 1),
+        "lucro_desejado": meta * lucro_pct / 100,
     }
 
-st.title("🍔 Controle Financeiro Lima")
-st.caption("Sistema simples para controlar a hamburgueria, alertar estouros e mirar 15% de lucro.")
+
+def alert_table(df, meta):
+    rows = []
+    if df.empty:
+        return pd.DataFrame()
+
+    df_cost = df[(df["Tipo"] == "Saída") & (~df["Plano de contas"].isin(INTERNAL_CATEGORIES))].copy()
+
+    for group, pct in LIMITS.items():
+        if group == "Lucro desejado":
+            continue
+
+        used = float(df_cost.loc[df_cost["Grupo interno"] == group, "Saída"].sum())
+        limit = meta * pct
+        diff = limit - used
+        status = "OK" if diff >= 0 else "ESTOUROU"
+
+        rows.append(
+            {
+                "Grupo": group,
+                "Limite ideal": limit,
+                "Gasto atual": used,
+                "Diferença": diff,
+                "Status": status,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def make_excel_download(df):
+    import io
+
+    buffer = io.BytesIO()
+    export_df = df.copy()
+
+    drop_cols = ["Grupo interno"]
+    for c in drop_cols:
+        if c in export_df.columns:
+            export_df = export_df.drop(columns=[c])
+
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="Lancamentos")
+    buffer.seek(0)
+    return buffer
+
+
+def get_month_name(dt):
+    meses = {
+        1: "Janeiro",
+        2: "Fevereiro",
+        3: "Março",
+        4: "Abril",
+        5: "Maio",
+        6: "Junho",
+        7: "Julho",
+        8: "Agosto",
+        9: "Setembro",
+        10: "Outubro",
+        11: "Novembro",
+        12: "Dezembro",
+    }
+    try:
+        if pd.isna(dt):
+            return "Sem data"
+        return meses[pd.to_datetime(dt).month]
+    except Exception:
+        return "Sem data"
+
+
+def build_dre(df, saldos_df=None):
+    meses = [
+        "Janeiro",
+        "Fevereiro",
+        "Março",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
+    ]
+
+    linhas = [
+        "SALDO INICIAL BANCOS",
+        "RECEITA BRUTA",
+        "(+) Venda de produto",
+        "(+) Venda iFood",
+        "CUSTOS VARIÁVEIS",
+        "Mercadoria / insumos / embalagens",
+        "Equipe / motoboy",
+        "MARGEM CONTRIBUIÇÃO",
+        "% MARGEM CONTRIBUIÇÃO",
+        "DESPESAS FIXAS",
+        "Fixos",
+        "Taxas / sistemas / marketing",
+        "Dívidas / impostos",
+        "Pró-labore / retirada",
+        "Investimento / manutenção",
+        "Sem classificação",
+        "RESULTADO OPERACIONAL",
+        "MOVIMENTAÇÃO CAIXINHA PJ",
+        "Aplicação caixinha PJ",
+        "Resgate caixinha PJ",
+        "SALDO FINAL BANCOS",
+        "RESULTADO DE CAIXA",
+    ]
+
+    dre = pd.DataFrame({"Plano de contas": linhas})
+
+    for mes in meses:
+        dre[mes] = 0.0
+
+    if not df.empty:
+        temp = df.copy()
+        temp["Mês"] = temp["Data"].apply(get_month_name)
+
+        for mes in meses:
+            dmes = temp[temp["Mês"] == mes].copy()
+            if dmes.empty:
+                continue
+
+            dmes_oper = dmes[~dmes["Plano de contas"].isin(INTERNAL_CATEGORIES)]
+
+            venda_produto = float(dmes_oper.loc[dmes_oper["Plano de contas"] == "Venda de produto", "Entrada"].sum())
+            venda_ifood = float(dmes_oper.loc[dmes_oper["Plano de contas"] == "Venda iFood", "Entrada"].sum())
+            outras_entradas = float(
+                dmes_oper.loc[
+                    (dmes_oper["Tipo"] == "Entrada")
+                    & (~dmes_oper["Plano de contas"].isin(["Venda de produto", "Venda iFood"])),
+                    "Entrada",
+                ].sum()
+            )
+
+            receita = venda_produto + venda_ifood + outras_entradas
+
+            custos_var = float(
+                dmes_oper.loc[
+                    dmes_oper["Grupo interno"].isin(
+                        ["Mercadoria / insumos / embalagens", "Equipe / motoboy"]
+                    ),
+                    "Saída",
+                ].sum()
+            )
+
+            mercadoria = float(
+                dmes_oper.loc[
+                    dmes_oper["Grupo interno"] == "Mercadoria / insumos / embalagens", "Saída"
+                ].sum()
+            )
+            equipe = float(dmes_oper.loc[dmes_oper["Grupo interno"] == "Equipe / motoboy", "Saída"].sum())
+
+            margem = receita - custos_var
+            margem_pct = (margem / receita * 100) if receita else 0.0
+
+            grupos_fixos = [
+                "Fixos",
+                "Taxas / sistemas / marketing",
+                "Dívidas / impostos",
+                "Pró-labore / retirada",
+                "Investimento / manutenção",
+                "Sem classificação",
+            ]
+            despesas = float(dmes_oper.loc[dmes_oper["Grupo interno"].isin(grupos_fixos), "Saída"].sum())
+
+            resultado = receita - custos_var - despesas
+
+            aplicacao = float(dmes.loc[dmes["Plano de contas"] == "Aplicação caixinha PJ", "Saída"].sum())
+            resgate = float(dmes.loc[dmes["Plano de contas"] == "Resgate caixinha PJ", "Entrada"].sum())
+            resgate_saida = float(dmes.loc[dmes["Plano de contas"] == "Resgate caixinha PJ", "Saída"].sum())
+            if resgate == 0 and resgate_saida > 0:
+                resgate = resgate_saida
+
+            valores = {
+                "RECEITA BRUTA": receita,
+                "(+) Venda de produto": venda_produto + outras_entradas,
+                "(+) Venda iFood": venda_ifood,
+                "CUSTOS VARIÁVEIS": custos_var,
+                "Mercadoria / insumos / embalagens": mercadoria,
+                "Equipe / motoboy": equipe,
+                "MARGEM CONTRIBUIÇÃO": margem,
+                "% MARGEM CONTRIBUIÇÃO": margem_pct,
+                "DESPESAS FIXAS": despesas,
+                "Fixos": float(dmes_oper.loc[dmes_oper["Grupo interno"] == "Fixos", "Saída"].sum()),
+                "Taxas / sistemas / marketing": float(
+                    dmes_oper.loc[dmes_oper["Grupo interno"] == "Taxas / sistemas / marketing", "Saída"].sum()
+                ),
+                "Dívidas / impostos": float(
+                    dmes_oper.loc[dmes_oper["Grupo interno"] == "Dívidas / impostos", "Saída"].sum()
+                ),
+                "Pró-labore / retirada": float(
+                    dmes_oper.loc[dmes_oper["Grupo interno"] == "Pró-labore / retirada", "Saída"].sum()
+                ),
+                "Investimento / manutenção": float(
+                    dmes_oper.loc[dmes_oper["Grupo interno"] == "Investimento / manutenção", "Saída"].sum()
+                ),
+                "Sem classificação": float(
+                    dmes_oper.loc[dmes_oper["Grupo interno"] == "Sem classificação", "Saída"].sum()
+                ),
+                "RESULTADO OPERACIONAL": resultado,
+                "MOVIMENTAÇÃO CAIXINHA PJ": resgate - aplicacao,
+                "Aplicação caixinha PJ": aplicacao,
+                "Resgate caixinha PJ": resgate,
+            }
+
+            for linha, valor in valores.items():
+                dre.loc[dre["Plano de contas"] == linha, mes] = valor
+
+    if saldos_df is not None and not saldos_df.empty:
+        for _, row in saldos_df.iterrows():
+            mes = row.get("Mês", "")
+            if mes in meses:
+                saldo_inicial = float(row.get("Saldo inicial total", 0))
+                saldo_final = float(row.get("Saldo final total", 0))
+                dre.loc[dre["Plano de contas"] == "SALDO INICIAL BANCOS", mes] = saldo_inicial
+                dre.loc[dre["Plano de contas"] == "SALDO FINAL BANCOS", mes] = saldo_final
+                dre.loc[dre["Plano de contas"] == "RESULTADO DE CAIXA", mes] = saldo_final - saldo_inicial
+
+    return dre
+
+
+def calc_bancos(df, bancos_config, mes_saldos):
+    rows = []
+    if bancos_config is None:
+        bancos_config = []
+
+    saldo_inicial_total = 0.0
+    saldo_final_total = 0.0
+
+    for banco in bancos_config:
+        nome = banco.get("Banco", "").strip()
+        saldo_inicial = float(banco.get("Saldo inicial", 0))
+        tipo = banco.get("Tipo", "Conta corrente")
+
+        if not nome:
+            continue
+
+        entradas = 0.0
+        saidas = 0.0
+
+        if not df.empty:
+            temp = df.copy()
+            temp["Mês"] = temp["Data"].apply(get_month_name)
+            temp = temp[temp["Mês"] == mes_saldos]
+
+            if tipo == "Caixinha PJ":
+                entradas += float(temp.loc[temp["Plano de contas"] == "Aplicação caixinha PJ", "Saída"].sum())
+                saidas += float(temp.loc[temp["Plano de contas"] == "Resgate caixinha PJ", "Entrada"].sum())
+                saidas += float(temp.loc[temp["Plano de contas"] == "Resgate caixinha PJ", "Saída"].sum())
+            else:
+                # Conta corrente acompanha o movimento geral do extrato,
+                # mas ignora aplicações e resgates como resultado operacional.
+                entradas += float(temp["Entrada"].sum())
+                saidas += float(temp["Saída"].sum())
+
+        saldo_final = saldo_inicial + entradas - saidas
+
+        saldo_inicial_total += saldo_inicial
+        saldo_final_total += saldo_final
+
+        rows.append(
+            {
+                "Mês": mes_saldos,
+                "Banco": nome,
+                "Tipo": tipo,
+                "Saldo inicial": saldo_inicial,
+                "Entradas": entradas,
+                "Saídas": saidas,
+                "Saldo final calculado": saldo_final,
+            }
+        )
+
+    saldos = pd.DataFrame(rows)
+    resumo = pd.DataFrame(
+        [
+            {
+                "Mês": mes_saldos,
+                "Saldo inicial total": saldo_inicial_total,
+                "Saldo final total": saldo_final_total,
+                "Resultado de caixa": saldo_final_total - saldo_inicial_total,
+            }
+        ]
+    )
+    return saldos, resumo
+
+
+def style_money_df(df, pct_rows=None):
+    if df.empty:
+        return df
+
+    formatted = df.copy()
+    pct_rows = pct_rows or []
+
+    for c in formatted.columns:
+        if c == "Plano de contas":
+            continue
+
+        def fmt_value(v, row_label=None):
+            try:
+                val = float(v)
+            except Exception:
+                return v
+
+            if row_label in pct_rows:
+                return f"{val:.2f}%".replace(".", ",")
+            return money(val)
+
+        formatted[c] = [
+            fmt_value(v, formatted.loc[i, "Plano de contas"] if "Plano de contas" in formatted.columns else None)
+            for i, v in formatted[c].items()
+        ]
+
+    return formatted
+
+
+rules = load_rules()
+
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
+
+if "bancos_config" not in st.session_state:
+    st.session_state.bancos_config = [
+        {"Banco": "Nubank PJ", "Tipo": "Conta corrente", "Saldo inicial": 0.0},
+        {"Banco": "Caixinha PJ", "Tipo": "Caixinha PJ", "Saldo inicial": 0.0},
+    ]
+
+if "rules" not in st.session_state:
+    st.session_state.rules = rules
+
+    st.title("Controle Financeiro")
 
 with st.sidebar:
-    st.header("Metas do mês")
-    meta_faturamento = st.number_input("Meta de faturamento do mês", value=55000.0, step=1000.0)
-    dias_abertos = st.number_input("Dias abertos no mês", value=26, step=1)
-    lucro_desejado = st.number_input("Lucro desejado (%)", value=15.0, step=1.0) / 100
+    st.header("Configurações")
+
+    meta = st.number_input("Meta de faturamento do mês", min_value=0.0, value=55000.0, step=500.0)
+    dias_abertos = st.number_input("Dias abertos no mês", min_value=1, value=26, step=1)
+    lucro_pct = st.number_input("Lucro desejado (%)", min_value=0.0, max_value=100.0, value=15.0, step=1.0)
 
     st.divider()
-    st.header("Regras")
-    rules = load_rules()
-    if st.button("Salvar regras atuais"):
-        save_rules(rules)
-        st.success("Regras salvas.")
+    st.subheader("Importar arquivo")
+    uploaded = st.file_uploader("PDF, Excel ou CSV", type=["pdf", "xlsx", "xls", "csv"])
 
-uploaded = st.file_uploader(
-    "Importe extrato, fatura ou planilha",
-    type=["xlsx", "xls", "csv", "pdf"],
-    accept_multiple_files=True
+    if uploaded:
+        if st.button("Importar e classificar"):
+            df_new = read_uploaded(uploaded, st.session_state.rules)
+
+            if not df_new.empty:
+                st.session_state.df = df_new
+                st.success(f"Arquivo importado com {len(df_new)} lançamentos.")
+            else:
+                st.warning("Não encontrei lançamentos no arquivo.")
+
+    st.divider()
+    st.caption("Sistema financeiro para restaurantes e pequenos negócios.")
+
+tabs = st.tabs(
+    [
+        "Dashboard",
+        "DRE Mensal",
+        "Lançamentos",
+        "Sem classificação",
+        "Regras",
+        "Bancos / Saldos",
+        "Exportar",
+    ]
 )
 
-if "dados" not in st.session_state:
-    st.session_state["dados"] = pd.DataFrame(columns=["Data", "Descrição", "Valor", "Tipo", "Categoria", "Grupo", "Entrada", "Saída", "Observação"])
+df = st.session_state.df.copy()
 
-if uploaded:
-    all_dfs = []
-    for file in uploaded:
-        name = file.name.lower()
-        if name.endswith((".xlsx", ".xls")):
-            raw = parse_excel(file)
-        elif name.endswith(".csv"):
-            raw = parse_csv(file)
-        elif name.endswith(".pdf"):
-            raw = parse_pdf(file)
-        else:
-            raw = pd.DataFrame()
-        if not raw.empty:
-            all_dfs.append(standardize_df(raw, rules))
+with tabs[0]:
+    st.subheader("Dashboard")
 
-    if all_dfs:
-        st.session_state["dados"] = pd.concat(all_dfs, ignore_index=True)
-
-df = st.session_state["dados"]
-
-with st.sidebar:
-    st.divider()
-    st.header("Bancos e saldos")
-    mes_saldo = st.selectbox("Mês dos saldos", MESES_PT, index=5)
-    st.caption("Cadastre quantos bancos quiser. O saldo final é automático: saldo inicial + entradas - saídas. Se sair mais do que entrou, fica negativo.")
-
-    if "bancos_base" not in st.session_state:
-        st.session_state["bancos_base"] = default_bancos_df()
-
-    bancos_editados = st.data_editor(
-        st.session_state["bancos_base"],
-        use_container_width=True,
-        num_rows="dynamic",
-        key="editor_bancos",
-        column_config={
-            "Banco": st.column_config.TextColumn("Banco / Conta"),
-            "Tipo": st.column_config.SelectboxColumn("Tipo", options=BANK_SOURCE_OPTIONS),
-            "Saldo inicial": st.column_config.NumberColumn("Saldo inicial", format="R$ %.2f"),
-            "Entradas manuais": st.column_config.NumberColumn("Entradas manuais", format="R$ %.2f"),
-            "Saídas manuais": st.column_config.NumberColumn("Saídas manuais", format="R$ %.2f"),
-        }
-    )
-    st.session_state["bancos_base"] = bancos_editados
-    bancos_calc = preparar_bancos(df, bancos_editados, mes_saldo)
-    saldos_bancos = saldos_from_bancos(bancos_calc)
-
-    st.markdown("**Saldos calculados**")
-    bancos_view = bancos_calc[["Banco", "Saldo inicial", "Entradas automáticas", "Saídas automáticas", "Saldo final automático"]].copy()
-    st.dataframe(
-        bancos_view.style.format({
-            "Saldo inicial": "R$ {:,.2f}",
-            "Entradas automáticas": "R$ {:,.2f}",
-            "Saídas automáticas": "R$ {:,.2f}",
-            "Saldo final automático": "R$ {:,.2f}",
-        }),
-        use_container_width=True,
-        height=220
-    )
-
-tab1, tab_dre, tab2, tab3, tab4, tab_bancos = st.tabs(["Dashboard", "DRE Mensal", "Lançamentos", "Sem classificação", "Regras", "Bancos / Saldos"])
-
-with tab1:
-    entradas, saidas, lucro_estimado, summary = prepare_summary(df, meta_faturamento)
+    summary = calc_summary(df, meta, dias_abertos, lucro_pct)
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Entradas identificadas", f"R$ {entradas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c2.metric("Saídas identificadas", f"R$ {saidas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c3.metric("Lucro estimado", f"R$ {lucro_estimado:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c4.metric("Meta diária", f"R$ {meta_faturamento/dias_abertos:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-    st.subheader("Alertas por categoria")
-    if summary.empty:
-        st.info("Importe um arquivo para ver os alertas.")
+    c1.metric("Entradas", money(summary["entradas"]))
+    c2.metric("Saídas", money(summary["saidas"]))
+    c3.metric("Resultado", money(summary["lucro"]))
+    c4.metric("Meta diária", money(summary["meta_diaria"]))
+
+    st.divider()
+
+    st.subheader("Alertas por limite")
+    alerts = alert_table(df, meta)
+
+    if not alerts.empty:
+        show_alerts = alerts.copy()
+        for c in ["Limite ideal", "Gasto atual", "Diferença"]:
+            show_alerts[c] = show_alerts[c].apply(money)
+
+        st.dataframe(show_alerts, use_container_width=True, hide_index=True)
     else:
-        def color_status(val):
-            if val == "ESTOUROU":
-                return "background-color: #ffcccc; color: #8a0000; font-weight: bold;"
-            if val == "OK":
-                return "background-color: #d8f5d0; color: #145214; font-weight: bold;"
-            return ""
+        st.info("Importe um arquivo para ver os alertas.")
 
-        summary_view = summary.rename(columns={"Grupo": "Categoria geral"})
-        st.dataframe(
-            summary_view.style.map(color_status, subset=["Status"]).format({
-                "Valor_abs": "R$ {:,.2f}",
-                "Limite ideal": "R$ {:,.2f}",
-                "Diferença": "R$ {:,.2f}",
-            }),
-            use_container_width=True
+    st.divider()
+
+    if not df.empty:
+        st.subheader("Resumo por plano de contas")
+
+        resumo = (
+            df[~df["Plano de contas"].isin(INTERNAL_CATEGORIES)]
+            .groupby("Plano de contas", as_index=False)
+            .agg(Entradas=("Entrada", "sum"), Saídas=("Saída", "sum"))
         )
+        resumo["Resultado"] = resumo["Entradas"] - resumo["Saídas"]
 
-    limite_mercadoria = meta_faturamento * 0.35
-    gasto_mercadoria = summary.loc[summary["Grupo"] == "Mercadoria / insumos / embalagens", "Valor_abs"].sum() if not summary.empty else 0
-    restante_mercadoria = limite_mercadoria - gasto_mercadoria
+        show = resumo.copy()
+        for c in ["Entradas", "Saídas", "Resultado"]:
+            show[c] = show[c].apply(money)
 
-    st.subheader("Compra da semana")
-    meta_dia = meta_faturamento / dias_abertos
-    teto_6_dias = meta_dia * 6 * 0.35
-    st.write(f"Para uma compra de quarta até segunda, o teto saudável é aproximadamente **R$ {teto_6_dias:,.2f}**.".replace(",", "X").replace(".", ",").replace("X", "."))
-    st.write(f"No mês, ainda pode gastar com mercadoria: **R$ {restante_mercadoria:,.2f}**.".replace(",", "X").replace(".", ",").replace("X", "."))
+        st.dataframe(show, use_container_width=True, hide_index=True)
 
-with tab_dre:
-    st.subheader("DRE mensal / Plano de contas")
-    st.caption("Visão no modelo da sua planilha: meses nas colunas, plano de contas nas linhas, saldos dos bancos e caixinha PJ monitorados no topo e no final.")
-    dre = prepare_dre_mensal(df, saldos_bancos=saldos_bancos, mes_saldo=mes_saldo)
+with tabs[1]:
+    st.subheader("DRE Mensal")
 
-    dre_format = dre.copy()
-    for col in dre_format.columns:
-        if col != "Plano de Contas":
-            dre_format[col] = [format_dre_value(v, row_name) for v, row_name in zip(dre_format[col], dre_format["Plano de Contas"])]
+    meses = [
+        "Janeiro",
+        "Fevereiro",
+        "Março",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
+    ]
+
+    mes_dre = st.selectbox("Mês usado para saldos bancários", meses, index=5)
+
+    saldos_calc, saldos_resumo = calc_bancos(df, st.session_state.bancos_config, mes_dre)
+    dre = build_dre(df, saldos_resumo)
 
     st.dataframe(
-        dre_format.style.apply(style_dre, axis=1),
+        style_money_df(dre, pct_rows=["% MARGEM CONTRIBUIÇÃO"]),
         use_container_width=True,
-        height=720
+        hide_index=True,
     )
 
-    import io
-    buffer_dre = io.BytesIO()
-    with pd.ExcelWriter(buffer_dre, engine="openpyxl") as writer:
-        dre.to_excel(writer, index=False, sheet_name="DRE_Mensal")
-    st.download_button(
-        "Baixar DRE mensal em Excel",
-        data=buffer_dre.getvalue(),
-        file_name="dre_mensal_lima.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    st.caption(
+        "Resultado operacional mostra a operação. Resultado de caixa mostra se o dinheiro total dos bancos/caixinhas aumentou ou diminuiu."
     )
 
-with tab2:
-    st.subheader("Lançamentos importados")
+with tabs[2]:
+    st.subheader("Lançamentos")
 
-    # A coluna Grupo é usada só por dentro para gerar os alertas.
-    # Ela não aparece mais para não atrapalhar o preenchimento do Plano de Contas.
-    df_editor = df.drop(columns=["Grupo"], errors="ignore")
-
-    edited = st.data_editor(
-        df_editor,
-        use_container_width=True,
-        num_rows="dynamic",
-        column_config={
-            "Categoria": st.column_config.SelectboxColumn("Plano de contas", options=ALL_CATEGORIES),
-        }
-    )
-    edited["Valor"] = pd.to_numeric(edited["Valor"], errors="coerce").fillna(0.0)
-    edited["Categoria"] = edited["Categoria"].apply(normalize_category)
-    edited["Grupo"] = edited["Categoria"].map(CATEGORY_GROUPS).fillna("Sem classificação")
-    edited["Entrada"] = edited["Valor"].apply(lambda x: x if x > 0 else 0.0)
-    edited["Saída"] = edited["Valor"].apply(lambda x: abs(x) if x < 0 else 0.0)
-    st.session_state["dados"] = edited
-
-    if not edited.empty:
-        output = edited.drop(columns=["Grupo"], errors="ignore").copy()
-        resumo_export = prepare_summary(edited, meta_faturamento)[3].rename(columns={"Grupo": "Categoria geral"})
-        import io
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            output.to_excel(writer, index=False, sheet_name="Lancamentos")
-            resumo_export.to_excel(writer, index=False, sheet_name="Resumo")
-            prepare_dre_mensal(edited, saldos_bancos=saldos_bancos, mes_saldo=mes_saldo).to_excel(writer, index=False, sheet_name="DRE_Mensal")
-        st.download_button(
-            "Baixar relatório em Excel",
-            data=buffer.getvalue(),
-            file_name="relatorio_controle_financeiro_lima.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-with tab3:
-    st.subheader("Lançamentos sem classificação")
-    st.caption("Agora você pode classificar direto por aqui. Escolha o Plano de contas na tabela e clique em Salvar classificações.")
-
-    pend = df[df["Categoria"] == "Sem classificação"].copy()
-    if pend.empty:
-        st.success("Nenhum lançamento sem classificação.")
+    if df.empty:
+        st.info("Importe um arquivo para editar os lançamentos.")
     else:
-        # Mostra só o que precisa para classificar rápido, mantendo o índice original escondido
-        pend_editor = pend.drop(columns=["Grupo"], errors="ignore").copy()
+        edit_df = df.copy()
 
-        # Colunas que normalmente não precisam ser editadas nesta aba
-        disabled_cols = [c for c in pend_editor.columns if c != "Categoria"]
+        display_cols = ["Data", "Descrição", "Tipo", "Entrada", "Saída", "Plano de contas"]
+        edit_df = edit_df[display_cols].copy()
 
-        edited_pend = st.data_editor(
-            pend_editor,
+        edited = st.data_editor(
+            edit_df,
             use_container_width=True,
-            num_rows="fixed",
             hide_index=True,
             column_config={
-                "Categoria": st.column_config.SelectboxColumn(
+                "Plano de contas": st.column_config.SelectboxColumn(
                     "Plano de contas",
                     options=ALL_CATEGORIES,
-                    required=True
+                    required=True,
                 ),
+                "Tipo": st.column_config.SelectboxColumn(
+                    "Tipo",
+                    options=["Entrada", "Saída"],
+                    required=True,
+                ),
+                "Entrada": st.column_config.NumberColumn("Entrada", format="R$ %.2f"),
+                "Saída": st.column_config.NumberColumn("Saída", format="R$ %.2f"),
             },
-            disabled=disabled_cols,
-            key="editor_sem_classificacao"
+            disabled=["Data", "Descrição", "Entrada", "Saída"],
+            key="editor_lancamentos",
         )
 
-        col_a, col_b = st.columns([1, 2])
-        with col_a:
-            salvar_pendentes = st.button("Salvar classificações", type="primary")
-        with col_b:
-            st.info("Depois de salvar, os itens classificados saem desta aba automaticamente.")
+        if st.button("Salvar alterações dos lançamentos"):
+            new_df = st.session_state.df.copy()
 
-        if salvar_pendentes:
-            dados_atualizados = st.session_state["dados"].copy()
-            alterados = 0
+            for i, row in edited.iterrows():
+                new_df.loc[i, "Plano de contas"] = normalize_category(row["Plano de contas"])
+                new_df.loc[i, "Grupo interno"] = CATEGORY_GROUPS.get(
+                    normalize_category(row["Plano de contas"]),
+                    "Sem classificação",
+                )
 
-            # Como o índice original foi preservado no pend_editor, usamos ele para atualizar a base principal
-            for idx, row in edited_pend.iterrows():
-                nova_categoria = normalize_category(row.get("Categoria", "Sem classificação"))
-                if nova_categoria != "Sem classificação" and idx in dados_atualizados.index:
-                    dados_atualizados.at[idx, "Categoria"] = nova_categoria
-                    alterados += 1
+            st.session_state.df = new_df
+            st.success("Alterações salvas.")
 
-            dados_atualizados["Grupo"] = dados_atualizados["Categoria"].map(CATEGORY_GROUPS).fillna("Sem classificação")
-            dados_atualizados["Valor"] = pd.to_numeric(dados_atualizados["Valor"], errors="coerce").fillna(0.0)
-            dados_atualizados["Entrada"] = dados_atualizados["Valor"].apply(lambda x: x if x > 0 else 0.0)
-            dados_atualizados["Saída"] = dados_atualizados["Valor"].apply(lambda x: abs(x) if x < 0 else 0.0)
-            st.session_state["dados"] = dados_atualizados
+with tabs[3]:
+    st.subheader("Sem classificação")
 
-            if alterados > 0:
-                st.success(f"{alterados} lançamento(s) classificado(s) com sucesso.")
-                st.rerun()
-            else:
-                st.warning("Nenhum item foi alterado. Escolha um Plano de contas diferente de Sem classificação.")
+    if df.empty:
+        st.info("Importe um arquivo primeiro.")
+    else:
+        mask = df["Plano de contas"].fillna("").eq("Sem classificação")
+        sem = df[mask].copy()
 
-with tab4:
-    st.subheader("Cadastrar nova regra")
-    col1, col2 = st.columns(2)
-    with col1:
-        palavra = st.text_input("Palavra-chave. Ex: Beira Rio")
-    with col2:
-        categoria = st.selectbox("Categoria", ALL_CATEGORIES)
-
-    if st.button("Adicionar regra"):
-        if palavra.strip():
-            rules.setdefault(categoria, [])
-            rules[categoria].append(palavra.strip())
-            save_rules(rules)
-            st.success(f"Regra adicionada: {palavra} → {categoria}")
+        if sem.empty:
+            st.success("Não há lançamentos sem classificação.")
         else:
-            st.error("Digite uma palavra-chave.")
+            st.write(f"{len(sem)} lançamentos sem classificação.")
 
-    st.subheader("Regras atuais")
-    rules_df = pd.DataFrame([{"Categoria": k, "Palavras-chave": ", ".join(v)} for k, v in rules.items()])
-    st.dataframe(rules_df, use_container_width=True)
+            sem_edit = sem[["Data", "Descrição", "Tipo", "Entrada", "Saída", "Plano de contas"]].copy()
 
+            edited_sem = st.data_editor(
+                sem_edit,
+                use_container_width=True,
+                hide_index=False,
+                column_config={
+                    "Plano de contas": st.column_config.SelectboxColumn(
+                        "Plano de contas",
+                        options=ALL_CATEGORIES,
+                        required=True,
+                    ),
+                    "Entrada": st.column_config.NumberColumn("Entrada", format="R$ %.2f"),
+                    "Saída": st.column_config.NumberColumn("Saída", format="R$ %.2f"),
+                },
+                disabled=["Data", "Descrição", "Tipo", "Entrada", "Saída"],
+                key="editor_sem_classificacao",
+            )
 
-with tab_bancos:
-    st.subheader("Bancos / Saldos cadastrados")
-    st.caption("Aqui você confere o saldo inicial, entradas, saídas e saldo final automático de cada banco. Serve para Nubank PJ, Caixinha PJ, Caixa, Sicredi, dinheiro em caixa ou qualquer outra conta.")
-    st.dataframe(
-        bancos_calc.style.format({
-            "Saldo inicial": "R$ {:,.2f}",
-            "Entradas manuais": "R$ {:,.2f}",
-            "Saídas manuais": "R$ {:,.2f}",
-            "Entradas automáticas": "R$ {:,.2f}",
-            "Saídas automáticas": "R$ {:,.2f}",
-            "Saldo final automático": "R$ {:,.2f}",
-        }),
-        use_container_width=True
+            st.caption("Altere o plano de contas aqui e clique em salvar. O lançamento sai automaticamente dessa aba.")
+
+            if st.button("Salvar classificações"):
+                new_df = st.session_state.df.copy()
+
+                for idx, row in edited_sem.iterrows():
+                    cat = normalize_category(row["Plano de contas"])
+                    new_df.loc[idx, "Plano de contas"] = cat
+                    new_df.loc[idx, "Grupo interno"] = CATEGORY_GROUPS.get(cat, "Sem classificação")
+
+                st.session_state.df = new_df
+                st.success("Classificações salvas. Atualize a aba para ver os itens saírem da lista.")
+
+with tabs[4]:
+    st.subheader("Regras de classificação")
+
+    st.write("Cadastre palavras-chave para o sistema classificar automaticamente nas próximas importações.")
+
+    rules_df_rows = []
+    for cat, keys in st.session_state.rules.items():
+        for key in keys:
+            rules_df_rows.append({"Plano de contas": cat, "Palavra-chave": key})
+
+    rules_df = pd.DataFrame(rules_df_rows)
+
+    edited_rules = st.data_editor(
+        rules_df,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            "Plano de contas": st.column_config.SelectboxColumn(
+                "Plano de contas",
+                options=ALL_CATEGORIES,
+                required=True,
+            )
+        },
+        key="rules_editor",
     )
-    st.info("Para a Caixinha PJ, o sistema entende Aplicação RDB como entrada na caixinha e Resgate RDB como saída da caixinha.")
+
+    if st.button("Salvar regras"):
+        new_rules = {}
+
+        for _, row in edited_rules.dropna().iterrows():
+            cat = normalize_category(row["Plano de contas"])
+            key = str(row["Palavra-chave"]).strip()
+
+            if not key:
+                continue
+
+            new_rules.setdefault(cat, [])
+            if key not in new_rules[cat]:
+                new_rules[cat].append(key)
+
+        st.session_state.rules = new_rules
+        save_rules(new_rules)
+        st.success("Regras salvas.")
+
+with tabs[5]:
+    st.subheader("Bancos / Saldos")
+
+    st.write(
+        "Cadastre as contas que você quer acompanhar. Exemplo: Nubank PJ, Caixinha PJ, Caixa, Mercado Pago, Dinheiro em caixa."
+    )
+
+    bancos_df = pd.DataFrame(st.session_state.bancos_config)
+
+    edited_bancos = st.data_editor(
+        bancos_df,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            "Banco": st.column_config.TextColumn("Banco"),
+            "Tipo": st.column_config.SelectboxColumn(
+                "Tipo",
+                options=["Conta corrente", "Caixinha PJ", "Dinheiro", "Cartão", "Outro"],
+                required=True,
+            ),
+            "Saldo inicial": st.column_config.NumberColumn("Saldo inicial", format="R$ %.2f"),
+        },
+        key="bancos_editor",
+    )
+
+    if st.button("Salvar bancos"):
+        st.session_state.bancos_config = edited_bancos.fillna("").to_dict("records")
+        st.success("Bancos salvos.")
+
+    st.divider()
+
+    meses = [
+        "Janeiro",
+        "Fevereiro",
+        "Março",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
+    ]
+
+    mes_saldos = st.selectbox("Mês para calcular saldos", meses, index=5, key="mes_saldos")
+
+    saldos_calc, saldos_resumo = calc_bancos(df, st.session_state.bancos_config, mes_saldos)
+
+    if not saldos_calc.empty:
+        show_saldos = saldos_calc.copy()
+        for c in ["Saldo inicial", "Entradas", "Saídas", "Saldo final calculado"]:
+            show_saldos[c] = show_saldos[c].apply(money)
+
+        st.dataframe(show_saldos, use_container_width=True, hide_index=True)
+
+        st.subheader("Resumo geral dos bancos")
+        show_resumo = saldos_resumo.copy()
+        for c in ["Saldo inicial total", "Saldo final total", "Resultado de caixa"]:
+            show_resumo[c] = show_resumo[c].apply(money)
+
+        st.dataframe(show_resumo, use_container_width=True, hide_index=True)
+
+        resultado = float(saldos_resumo["Resultado de caixa"].iloc[0])
+        if resultado > 0:
+            st.success(f"Sobrou dinheiro no caixa no mês: {money(resultado)}")
+        elif resultado < 0:
+            st.error(f"Faltou dinheiro no caixa no mês: {money(resultado)}")
+        else:
+            st.info("O caixa terminou igual ao início do mês.")
+
+    else:
+        st.info("Cadastre pelo menos um banco/conta.")
+
+    st.caption(
+        "Para a Caixinha PJ: Aplicação caixinha PJ aumenta a caixinha. Resgate caixinha PJ diminui a caixinha."
+    )
+
+with tabs[6]:
+    st.subheader("Exportar")
+
+    if df.empty:
+        st.info("Importe um arquivo primeiro.")
+    else:
+        buffer = make_excel_download(df)
+
+        st.download_button(
+            label="Baixar Excel organizado",
+            data=buffer,
+            file_name="controle_financeiro_lima.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        st.write("Prévia do arquivo exportado:")
+
+        export_preview = df.copy()
+        if "Grupo interno" in export_preview.columns:
+            export_preview = export_preview.drop(columns=["Grupo interno"])
+
+        st.dataframe(export_preview, use_container_width=True, hide_index=True)
+        
