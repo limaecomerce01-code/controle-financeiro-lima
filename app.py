@@ -791,12 +791,16 @@ with st.sidebar:
     uploaded = st.file_uploader("Importe extrato, fatura ou planilha", type=["pdf", "xlsx", "xls", "csv"])
 
     if uploaded:
+with st.sidebar:
+    uploaded = st.file_uploader("Importe extrato, fatura ou planilha", type=["pdf", "xlsx", "xls", "csv"])
+
+    if uploaded:
         if st.button("Importar e classificar"):
             df_new = read_uploaded(uploaded, st.session_state.rules)
 
             if not df_new.empty:
-              st.session_state.df = df_new
-             save_data()
+                st.session_state.df = df_new
+                save_data()
                 st.success(f"Arquivo importado com {len(df_new)} lançamentos.")
             else:
                 st.warning("Não encontrei lançamentos no arquivo.")
