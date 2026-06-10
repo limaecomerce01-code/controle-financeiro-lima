@@ -796,7 +796,7 @@ with st.sidebar:
 
             if not df_new.empty:
               st.session_state.df = df_new
-save_data()
+             save_data()
                 st.success(f"Arquivo importado com {len(df_new)} lançamentos.")
             else:
                 st.warning("Não encontrei lançamentos no arquivo.")
