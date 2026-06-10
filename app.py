@@ -980,6 +980,56 @@ with tabs[4]:
 
     st.write("Cadastre palavras-chave para o sistema classificar automaticamente nas próximas importações.")
 
+    st.divider()
+
+    st.subheader("Cadastro rápido de palavras-chave")
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        plano_rapido = st.selectbox(
+            "Plano de contas",
+            options=ALL_CATEGORIES,
+            key="plano_rapido_regras"
+        )
+
+    with col2:
+        palavras_rapidas = st.text_area(
+            "Palavras-chave separadas por vírgula",
+            placeholder="Exemplo: açaí, forte atacadista, comprador, supermercado",
+            key="palavras_rapidas_regras"
+        )
+
+    if st.button("Adicionar palavras-chave"):
+        if not palavras_rapidas.strip():
+            st.warning("Digite pelo menos uma palavra-chave.")
+        else:
+            plano_rapido = normalize_category(plano_rapido)
+
+            novas_palavras = [
+                p.strip()
+                for p in palavras_rapidas.split(",")
+                if p.strip()
+            ]
+
+            if plano_rapido not in st.session_state.rules:
+                st.session_state.rules[plano_rapido] = []
+
+            adicionadas = 0
+
+            for palavra in novas_palavras:
+                if palavra not in st.session_state.rules[plano_rapido]:
+                    st.session_state.rules[plano_rapido].append(palavra)
+                    adicionadas += 1
+
+            save_rules(st.session_state.rules)
+
+            st.success(f"{adicionadas} palavra(s)-chave adicionada(s) ao plano: {plano_rapido}")
+
+    st.divider()
+
+    st.subheader("Lista de regras cadastradas")
+
     rules_df_rows = []
     for cat, keys in st.session_state.rules.items():
         for key in keys:
@@ -1002,7 +1052,7 @@ with tabs[4]:
         key="rules_editor",
     )
 
-    if st.button("Salvar regras"):
+    if st.button("Salvar regras editadas"):
         new_rules = {}
 
         for _, row in edited_rules.dropna().iterrows():
@@ -1019,7 +1069,6 @@ with tabs[4]:
         st.session_state.rules = new_rules
         save_rules(new_rules)
         st.success("Regras salvas.")
-
 with tabs[5]:
     st.subheader("Bancos / Saldos")
 
