@@ -790,11 +790,8 @@ with st.sidebar:
     st.header("Importar")
     uploaded = st.file_uploader("Importe extrato, fatura ou planilha", type=["pdf", "xlsx", "xls", "csv"])
 
-    if uploaded:
-with st.sidebar:
-    uploaded = st.file_uploader("Importe extrato, fatura ou planilha", type=["pdf", "xlsx", "xls", "csv"])
 
-    if uploaded:
+          if uploaded:
         if st.button("Importar e classificar"):
             df_new = read_uploaded(uploaded, st.session_state.rules)
 
@@ -806,17 +803,7 @@ with st.sidebar:
                 st.warning("Não encontrei lançamentos no arquivo.")
 
     st.divider()
-    st.caption("Não suba extratos no GitHub. Use o GitHub só para o código.")
-
-tabs = st.tabs([
-    "Dashboard",
-    "DRE Mensal",
-    "Lançamentos",
-    "Sem classificação",
-    "Regras / Planos de contas",
-    "Bancos / Saldos",
-    "Exportar",
-])
+    st.caption("Não suba extratos no GitHub. Use o GitHub só para o código.") 
 
 df = st.session_state.df.copy()
 
