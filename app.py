@@ -1063,7 +1063,9 @@ with tabs[4]:
 
     st.subheader("Regras cadastradas")
 
-    st.write("Aqui você pode editar ou excluir palavras-chave manualmente.")
+     st.subheader("Regras cadastradas")
+
+    st.write("Aqui você pode editar, adicionar ou excluir palavras-chave manualmente.")
 
     rules_df_rows = []
 
@@ -1071,27 +1073,38 @@ with tabs[4]:
         for key in keys:
             rules_df_rows.append(
                 {
-                    "Plano de contas": normalize_category(cat),
                     "Palavra-chave": key,
+                    "Plano de contas": normalize_category(cat),
+                    "Excluir": False,
                 }
             )
 
     rules_df = pd.DataFrame(rules_df_rows)
+
+    if rules_df.empty:
+        rules_df = pd.DataFrame(
+            columns=["Palavra-chave", "Plano de contas", "Excluir"]
+        )
 
     edited_rules = st.data_editor(
         rules_df,
         use_container_width=True,
         hide_index=True,
         num_rows="dynamic",
+        column_order=["Palavra-chave", "Plano de contas", "Excluir"],
         column_config={
+            "Palavra-chave": st.column_config.TextColumn(
+                "Palavra-chave",
+                required=True,
+            ),
             "Plano de contas": st.column_config.SelectboxColumn(
                 "Plano de contas",
                 options=get_all_categories(),
                 required=True,
             ),
-            "Palavra-chave": st.column_config.TextColumn(
-                "Palavra-chave",
-                required=True,
+            "Excluir": st.column_config.CheckboxColumn(
+                "Excluir",
+                default=False,
             ),
         },
         key="rules_editor",
@@ -1100,11 +1113,15 @@ with tabs[4]:
     if st.button("Salvar regras editadas"):
         new_rules = {}
 
-        for _, row in edited_rules.dropna().iterrows():
-            cat = normalize_category(row["Plano de contas"])
-            key = str(row["Palavra-chave"]).strip()
+        for _, row in edited_rules.iterrows():
+            excluir = bool(row.get("Excluir", False))
+            key = str(row.get("Palavra-chave", "")).strip()
+            cat = normalize_category(row.get("Plano de contas", ""))
 
-            if not key:
+            if excluir:
+                continue
+
+            if not key or not cat:
                 continue
 
             new_rules.setdefault(cat, [])
@@ -1114,6 +1131,7 @@ with tabs[4]:
 
         st.session_state.rules = new_rules
         save_rules(new_rules)
+
         st.success("Regras salvas.")
 with tabs[5]:
     st.subheader("Bancos / Saldos")
