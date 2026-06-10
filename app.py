@@ -101,7 +101,39 @@ INTERNAL_CATEGORIES = {
     "Saldo caixinha PJ",
 }
 
-ALL_CATEGORIES = sorted(set(CATEGORY_GROUPS.keys()))
+DEFAULT_PLANOS = sorted(set(CATEGORY_GROUPS.keys()))
+
+if "planos_contas" not in st.session_state:
+    st.session_state.planos_contas = pd.DataFrame({
+        "Plano de contas": DEFAULT_PLANOS,
+        "Grupo interno": [CATEGORY_GROUPS.get(p, "Sem classificação") for p in DEFAULT_PLANOS],
+        "Ativo": [True for _ in DEFAULT_PLANOS],
+    })
+
+
+def get_all_categories():
+    if "planos_contas" not in st.session_state:
+        return DEFAULT_PLANOS
+
+    planos = st.session_state.planos_contas.copy()
+
+    if "Ativo" in planos.columns:
+        planos = planos[planos["Ativo"] == True]
+
+    return sorted(planos["Plano de contas"].dropna().astype(str).unique().tolist())
+
+
+def get_group(plano):
+    plano = normalize_category(plano)
+
+    if "planos_contas" in st.session_state:
+        planos = st.session_state.planos_contas.copy()
+        match = planos[planos["Plano de contas"].astype(str) == plano]
+
+        if not match.empty:
+            return str(match.iloc[0]["Grupo interno"])
+
+    return CATEGORY_GROUPS.get(plano, "Sem classificação")
 
 
 def normalize_category(cat):
@@ -373,7 +405,7 @@ def standardize_df(df, rules):
         out["Plano de contas"] = out["Descrição"].apply(lambda x: classify(x, rules))
 
     out["Plano de contas"] = out["Plano de contas"].apply(normalize_category)
-    out["Grupo interno"] = out["Plano de contas"].map(CATEGORY_GROUPS).fillna("Sem classificação")
+    out["Grupo interno"] = out["Plano de contas"].apply(get_group)
 
     try:
         out["Data"] = pd.to_datetime(out["Data"], dayfirst=True, errors="coerce")
@@ -901,7 +933,7 @@ with tabs[2]:
             column_config={
                 "Plano de contas": st.column_config.SelectboxColumn(
                     "Plano de contas",
-                    options=ALL_CATEGORIES,
+                   options=get_all_categories(),
                     required=True,
                 ),
                 "Tipo": st.column_config.SelectboxColumn(
@@ -952,7 +984,7 @@ with tabs[3]:
                 column_config={
                     "Plano de contas": st.column_config.SelectboxColumn(
                         "Plano de contas",
-                        options=ALL_CATEGORIES,
+                        options=get_all_categories(),
                         required=True,
                     ),
                     "Entrada": st.column_config.NumberColumn("Entrada", format="R$ %.2f"),
@@ -970,13 +1002,61 @@ with tabs[3]:
                 for idx, row in edited_sem.iterrows():
                     cat = normalize_category(row["Plano de contas"])
                     new_df.loc[idx, "Plano de contas"] = cat
-                    new_df.loc[idx, "Grupo interno"] = CATEGORY_GROUPS.get(cat, "Sem classificação")
+                    new_df.loc[idx, "Grupo interno"] = get_group(cat)
 
                 st.session_state.df = new_df
                 st.success("Classificações salvas. Atualize a aba para ver os itens saírem da lista.")
 
 with tabs[4]:
     st.subheader("Regras de classificação")
+        st.subheader("Gerenciar planos de contas")
+
+    st.write("Aqui você pode adicionar, editar ou desativar os nomes que aparecem na classificação.")
+
+    grupos_disponiveis = [
+        "Entradas",
+        "Mercadoria / insumos / embalagens",
+        "Equipe / motoboy",
+        "Fixos",
+        "Taxas / sistemas / marketing",
+        "Dívidas / impostos",
+        "Pró-labore / retirada",
+        "Investimento / manutenção",
+        "Transferência interna",
+        "Saldo",
+        "Sem classificação",
+    ]
+
+    planos_editados = st.data_editor(
+        st.session_state.planos_contas,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            "Plano de contas": st.column_config.TextColumn(
+                "Plano de contas",
+                required=True,
+            ),
+            "Grupo interno": st.column_config.SelectboxColumn(
+                "Grupo interno",
+                options=grupos_disponiveis,
+                required=True,
+            ),
+            "Ativo": st.column_config.CheckboxColumn(
+                "Ativo",
+                default=True,
+            ),
+        },
+        key="editor_planos_contas",
+    )
+
+    if st.button("Salvar planos de contas"):
+        planos_editados["Plano de contas"] = planos_editados["Plano de contas"].astype(str).str.strip()
+        planos_editados = planos_editados[planos_editados["Plano de contas"] != ""]
+        st.session_state.planos_contas = planos_editados
+        st.success("Planos de contas salvos.")
+
+    st.divider()
 
     st.write("Cadastre palavras-chave para o sistema classificar automaticamente nas próximas importações.")
 
@@ -989,7 +1069,7 @@ with tabs[4]:
     with col1:
         plano_rapido = st.selectbox(
             "Plano de contas",
-            options=ALL_CATEGORIES,
+           options=get_all_categories(),
             key="plano_rapido_regras"
         )
 
@@ -1045,7 +1125,7 @@ with tabs[4]:
         column_config={
             "Plano de contas": st.column_config.SelectboxColumn(
                 "Plano de contas",
-                options=ALL_CATEGORIES,
+                options=get_all_categories(),
                 required=True,
             )
         },
