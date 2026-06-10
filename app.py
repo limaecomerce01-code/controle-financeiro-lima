@@ -1184,7 +1184,6 @@ with tabs[3]:
                 save_data()
                 st.success("Classificações salvas. Os itens classificados sairão dessa aba.")
 
-
 with tabs[4]:
     st.subheader("Planos de contas")
 
@@ -1317,31 +1316,36 @@ with tabs[4]:
                 default=False,
             ),
         },
-        key="rules_editor",
+        key="rules_editor_corrigido",
     )
 
-    if st.button("Salvar regras editadas"):
+    if st.button("Salvar alterações e excluir marcadas"):
         new_rules = {}
+        excluidas = 0
+        salvas = 0
 
         for _, row in edited_rules.iterrows():
             excluir = bool(row.get("Excluir", False))
             key = str(row.get("Palavra-chave", "")).strip()
             cat = normalize_category(row.get("Plano de contas", ""))
 
-            if excluir:
+            if not key or not cat:
                 continue
 
-            if not key or not cat:
+            if excluir:
+                excluidas += 1
                 continue
 
             new_rules.setdefault(cat, [])
 
             if key not in new_rules[cat]:
                 new_rules[cat].append(key)
+                salvas += 1
 
         st.session_state.rules = new_rules
         save_rules(new_rules)
-        st.success("Regras salvas.")
+
+        st.success(f"Regras salvas. {excluidas} palavra(s) excluída(s).")
 
 
 with tabs[5]:
