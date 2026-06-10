@@ -1009,104 +1009,10 @@ with tabs[3]:
 
 with tabs[4]:
     st.subheader("Regras de classificação")
-        st.subheader("Gerenciar planos de contas")
+
+    st.subheader("Gerenciar planos de contas")
 
     st.write("Aqui você pode adicionar, editar ou desativar os nomes que aparecem na classificação.")
-
-    grupos_disponiveis = [
-        "Entradas",
-        "Mercadoria / insumos / embalagens",
-        "Equipe / motoboy",
-        "Fixos",
-        "Taxas / sistemas / marketing",
-        "Dívidas / impostos",
-        "Pró-labore / retirada",
-        "Investimento / manutenção",
-        "Transferência interna",
-        "Saldo",
-        "Sem classificação",
-    ]
-
-    planos_editados = st.data_editor(
-        st.session_state.planos_contas,
-        use_container_width=True,
-        hide_index=True,
-        num_rows="dynamic",
-        column_config={
-            "Plano de contas": st.column_config.TextColumn(
-                "Plano de contas",
-                required=True,
-            ),
-            "Grupo interno": st.column_config.SelectboxColumn(
-                "Grupo interno",
-                options=grupos_disponiveis,
-                required=True,
-            ),
-            "Ativo": st.column_config.CheckboxColumn(
-                "Ativo",
-                default=True,
-            ),
-        },
-        key="editor_planos_contas",
-    )
-
-    if st.button("Salvar planos de contas"):
-        planos_editados["Plano de contas"] = planos_editados["Plano de contas"].astype(str).str.strip()
-        planos_editados = planos_editados[planos_editados["Plano de contas"] != ""]
-        st.session_state.planos_contas = planos_editados
-        st.success("Planos de contas salvos.")
-
-    st.divider()
-
-    st.write("Cadastre palavras-chave para o sistema classificar automaticamente nas próximas importações.")
-
-    st.divider()
-
-    st.subheader("Cadastro rápido de palavras-chave")
-
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        plano_rapido = st.selectbox(
-            "Plano de contas",
-           options=get_all_categories(),
-            key="plano_rapido_regras"
-        )
-
-    with col2:
-        palavras_rapidas = st.text_area(
-            "Palavras-chave separadas por vírgula",
-            placeholder="Exemplo: açaí, forte atacadista, comprador, supermercado",
-            key="palavras_rapidas_regras"
-        )
-
-    if st.button("Adicionar palavras-chave"):
-        if not palavras_rapidas.strip():
-            st.warning("Digite pelo menos uma palavra-chave.")
-        else:
-            plano_rapido = normalize_category(plano_rapido)
-
-            novas_palavras = [
-                p.strip()
-                for p in palavras_rapidas.split(",")
-                if p.strip()
-            ]
-
-            if plano_rapido not in st.session_state.rules:
-                st.session_state.rules[plano_rapido] = []
-
-            adicionadas = 0
-
-            for palavra in novas_palavras:
-                if palavra not in st.session_state.rules[plano_rapido]:
-                    st.session_state.rules[plano_rapido].append(palavra)
-                    adicionadas += 1
-
-            save_rules(st.session_state.rules)
-
-            st.success(f"{adicionadas} palavra(s)-chave adicionada(s) ao plano: {plano_rapido}")
-
-    st.divider()
 
     st.subheader("Lista de regras cadastradas")
 
